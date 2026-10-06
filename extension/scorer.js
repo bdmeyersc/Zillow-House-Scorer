@@ -1,18 +1,41 @@
 (function (root) {
-  const CRITERIA = {
-    priceMin: 250000, priceMax: 360000,
-    beds: 3, minBaths: 2,
-    sqftMin: 1600, sqftMaxNoUpstairs: 2000, sqftMaxUpstairs: 2350,
-    minGarage: 2,
+  const DEFAULT_CONFIG = {
+    price: { on: true, min: 250000, max: 360000 },
+    beds: { on: true, min: 3, max: 3 },
+    baths: { on: true, minFull: 2 },
+    sqft: { on: true, min: 1600, maxNoUpstairs: 2000, maxUpstairs: 2350 },
+    garage: { on: true, min: 2 },
+    wants: {
+      screened: { on: true, yes: 30, partial: 15, no: -30 },
+      fence: { on: true, yes: 25, partial: 10, no: -25 },
+      patio: { on: true, yes: 20, partial: 10, no: -20 },
+      shed: { on: true, yes: 15, partial: 0, no: 0 },
+      sprinkler: { on: true, yes: 10, partial: 0, no: 0 },
+    },
   };
 
-  const POINTS = {
-    screened: { yes: 30, partial: 15, unknown: 0, no: -30 },
-    fence: { yes: 25, partial: 10, unknown: 0, no: -25 },
-    patio: { yes: 20, partial: 10, unknown: 0, no: -20 },
-    shed: { yes: 15, partial: 0, unknown: 0, no: 0 },
-    sprinkler: { yes: 10, partial: 0, unknown: 0, no: 0 },
-  };
+  // states: which outcomes the scorer can produce for each want (shed/sprinkler are bonus-only).
+  const WANTS = [
+    { key: 'screened', name: 'Screened porch on back', short: 'Screened back porch', states: ['yes', 'partial', 'no'] },
+    { key: 'fence', name: 'Fenced backyard', short: 'Fenced backyard', states: ['yes', 'partial', 'no'] },
+    { key: 'patio', name: 'Patio for grilling', short: 'Patio for grill', states: ['yes', 'partial', 'no'] },
+    { key: 'shed', name: 'Shed / workshop', short: 'Shed / workshop', states: ['yes'] },
+    { key: 'sprinkler', name: 'Sprinkler system', short: 'Sprinklers', states: ['yes'] },
+  ];
+
+  // Fills in anything missing or invalid from DEFAULT_CONFIG.
+  function normalizeConfig(c) {
+    const fix = (def, v) => {
+      if (typeof def === 'boolean') return typeof v === 'boolean' ? v : def;
+      if (typeof def === 'number') { const n = Number(v); return v !== '' && v != null && Number.isFinite(n) ? n : def; }
+      const out = {};
+      for (const k in def) out[k] = fix(def[k], v && typeof v === 'object' ? v[k] : undefined);
+      return out;
+    };
+    return fix(DEFAULT_CONFIG, c);
+  }
+
+  const maxScore = (cfg) => WANTS.reduce((s, w) => s + (cfg.wants[w.key].on ? Math.max(0, cfg.wants[w.key].yes) : 0), 0);
 
   const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'SVG', 'NOSCRIPT', 'TEMPLATE']);
 
@@ -201,57 +224,89 @@
   }
 
   const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
+  const n = (x) => Number(x).toLocaleString('en-US');
+  const range = (a, b) => (a === b ? `${a}` : `${a}–${b}`);
+  const GARAGE_WORDS = { one: 1, single: 1, two: 2, double: 2, three: 3, triple: 3, four: 4 };
 
-  function mustHaves(f, upstairs) {
-    const C = CRITERIA;
+  // Plain-language summary of the must-haves in a config, for the report legend.
+  function describeMusts(cfg) {
     const out = [];
-    const add = (name, status, detail) => out.push({ name, status, detail });
-
-    if (f.price == null) add('Price', 'verify', 'price not found');
-    else if (f.price < C.priceMin || f.price > C.priceMax) add('Price', 'fail', `${money(f.price)} is outside $250,000–$360,000`);
-    else add('Price', 'pass', money(f.price));
-
-    if (f.beds == null) add('Bedrooms', 'verify', 'bedrooms not found');
-    else if (f.beds !== C.beds) add('Bedrooms', 'fail', `${f.beds} bedrooms (need 3)`);
-    else add('Bedrooms', 'pass', '3 bedrooms');
-
-    const realBaths = f.fullBaths != null ? f.fullBaths + f.threeQBaths : null;
-    const bathText = f.fullBaths != null
-      ? `${f.fullBaths} full` + (f.threeQBaths ? ` + ${f.threeQBaths} three-quarter` : '') + (f.halfBaths ? ` + ${f.halfBaths} half` : '')
-      : `${f.bathsTotal} baths`;
-    if (realBaths != null && realBaths >= C.minBaths) add('Bathrooms', 'pass', bathText);
-    else if (realBaths != null && f.bathsTotal != null && f.bathsTotal >= C.minBaths && f.bathsTotal > realBaths + f.halfBaths) add('Bathrooms', 'verify', `${bathText} (total says ${f.bathsTotal}; check bath types)`);
-    else if (realBaths != null) add('Bathrooms', 'fail', `${bathText} (need 2 full)`);
-    else if (f.bathsTotal == null) add('Bathrooms', 'verify', 'bathrooms not found');
-    else if (f.bathsTotal >= C.minBaths) add('Bathrooms', 'pass', bathText);
-    else add('Bathrooms', 'fail', `${bathText} (need 2)`);
-
-    if (f.sqft == null) add('Square feet', 'verify', 'square feet not found');
-    else if (f.sqft < C.sqftMin) add('Square feet', 'fail', `${f.sqft.toLocaleString()} sq ft is under 1,600`);
-    else if (f.sqft > C.sqftMaxUpstairs) add('Square feet', 'fail', `${f.sqft.toLocaleString()} sq ft is over 2,350`);
-    else if (f.sqft > C.sqftMaxNoUpstairs) {
-      if (upstairs.value === 'yes') add('Square feet', 'pass', `${f.sqft.toLocaleString()} sq ft (OK, has upstairs room)`);
-      else if (upstairs.value === 'no') add('Square feet', 'fail', `${f.sqft.toLocaleString()} sq ft is over 2,000 with no upstairs room`);
-      else add('Square feet', 'verify', `${f.sqft.toLocaleString()} sq ft: OK only if there's an upstairs room`);
-    } else add('Square feet', 'pass', `${f.sqft.toLocaleString()} sq ft`);
-
-    const att = num(f.attachedGarage), det = num(f.detachedGarage), gs = num(f.garageSpaces);
-    const spaces = gs != null ? gs : (att != null || det != null ? (att || 0) + (det || 0) : null);
-    const d = f.description;
-    if (spaces != null && spaces >= C.minGarage) add('2-car garage', 'pass', `${spaces}-car garage`);
-    else if (spaces != null && spaces > 0) add('2-car garage', 'fail', `${spaces}-car garage`);
-    else if (/\b(2|two|double|3|three)[- ]car garage|\b(double|two|2) garage/i.test(d)) add('2-car garage', 'pass', 'description mentions a 2-car garage');
-    else if (/\b(1|one|single)[- ]car garage/i.test(d)) add('2-car garage', 'fail', 'description says 1-car garage');
-    else if (f.parking && !/garage/i.test(f.parking) && /carport/i.test(f.parking)) add('2-car garage', 'fail', `carport, no garage (${f.parking})`);
-    else add('2-car garage', 'verify', f.parking ? `garage size not listed (Parking: ${f.parking})` : 'garage not listed');
+    if (cfg.price.on) out.push(`${money(cfg.price.min)}–${money(cfg.price.max)}`);
+    if (cfg.beds.on) out.push(`${range(cfg.beds.min, cfg.beds.max)} bedrooms`);
+    if (cfg.baths.on) out.push(`${cfg.baths.minFull}+ full baths`);
+    if (cfg.sqft.on) out.push(`${n(cfg.sqft.min)}–${n(cfg.sqft.maxNoUpstairs)} sq ft (up to ${n(cfg.sqft.maxUpstairs)} with an upstairs room)`);
+    if (cfg.garage.on) out.push(`${cfg.garage.min}-car garage`);
     return out;
   }
 
-  function wants(f) {
+  function mustHaves(f, upstairs, cfg) {
+    const out = [];
+    const add = (name, status, detail) => out.push({ name, status, detail });
+
+    if (cfg.price.on) {
+      const C = cfg.price;
+      if (f.price == null) add('Price', 'verify', 'price not found');
+      else if (f.price < C.min || f.price > C.max) add('Price', 'fail', `${money(f.price)} is outside ${money(C.min)}–${money(C.max)}`);
+      else add('Price', 'pass', money(f.price));
+    }
+
+    if (cfg.beds.on) {
+      const C = cfg.beds;
+      if (f.beds == null) add('Bedrooms', 'verify', 'bedrooms not found');
+      else if (f.beds < C.min || f.beds > C.max) add('Bedrooms', 'fail', `${f.beds} bedrooms (need ${range(C.min, C.max)})`);
+      else add('Bedrooms', 'pass', `${f.beds} bedrooms`);
+    }
+
+    if (cfg.baths.on) {
+      const min = cfg.baths.minFull;
+      const realBaths = f.fullBaths != null ? f.fullBaths + f.threeQBaths : null;
+      const bathText = f.fullBaths != null
+        ? `${f.fullBaths} full` + (f.threeQBaths ? ` + ${f.threeQBaths} three-quarter` : '') + (f.halfBaths ? ` + ${f.halfBaths} half` : '')
+        : `${f.bathsTotal} baths`;
+      if (realBaths != null && realBaths >= min) add('Bathrooms', 'pass', bathText);
+      else if (realBaths != null && f.bathsTotal != null && f.bathsTotal >= min && f.bathsTotal > realBaths + f.halfBaths) add('Bathrooms', 'verify', `${bathText} (total says ${f.bathsTotal}; check bath types)`);
+      else if (realBaths != null) add('Bathrooms', 'fail', `${bathText} (need ${min} full)`);
+      else if (f.bathsTotal == null) add('Bathrooms', 'verify', 'bathrooms not found');
+      else if (f.bathsTotal >= min) add('Bathrooms', 'pass', bathText);
+      else add('Bathrooms', 'fail', `${bathText} (need ${min})`);
+    }
+
+    if (cfg.sqft.on) {
+      const C = cfg.sqft;
+      const lo = Math.min(C.maxNoUpstairs, C.maxUpstairs), hi = Math.max(C.maxNoUpstairs, C.maxUpstairs);
+      if (f.sqft == null) add('Square feet', 'verify', 'square feet not found');
+      else if (f.sqft < C.min) add('Square feet', 'fail', `${n(f.sqft)} sq ft is under ${n(C.min)}`);
+      else if (f.sqft > hi) add('Square feet', 'fail', `${n(f.sqft)} sq ft is over ${n(hi)}`);
+      else if (f.sqft > lo) {
+        const needUp = C.maxUpstairs > C.maxNoUpstairs;
+        if (upstairs.value === (needUp ? 'yes' : 'no')) add('Square feet', 'pass', `${n(f.sqft)} sq ft (OK, ${needUp ? 'has' : 'no'} upstairs room)`);
+        else if (upstairs.value !== 'unknown') add('Square feet', 'fail', `${n(f.sqft)} sq ft is over ${n(lo)} ${needUp ? 'with no' : 'with an'} upstairs room`);
+        else add('Square feet', 'verify', `${n(f.sqft)} sq ft: OK only if there's ${needUp ? 'an' : 'no'} upstairs room`);
+      } else add('Square feet', 'pass', `${n(f.sqft)} sq ft`);
+    }
+
+    if (cfg.garage.on) {
+      const min = cfg.garage.min;
+      const label = `${min}-car garage`;
+      const att = num(f.attachedGarage), det = num(f.detachedGarage), gs = num(f.garageSpaces);
+      const spaces = gs != null ? gs : (att != null || det != null ? (att || 0) + (det || 0) : null);
+      const dm = f.description.match(/\b(\d|one|single|two|double|three|triple|four)[- ]car garage|\b(double|two|2) garage/i);
+      const dSpaces = dm ? (dm[1] ? (GARAGE_WORDS[dm[1].toLowerCase()] || Number(dm[1])) : 2) : null;
+      if (spaces != null && spaces >= min) add(label, 'pass', `${spaces}-car garage`);
+      else if (spaces != null && spaces > 0) add(label, 'fail', `${spaces}-car garage`);
+      else if (dSpaces != null && dSpaces >= min) add(label, 'pass', `description mentions "${dm[0]}"`);
+      else if (dSpaces != null) add(label, 'fail', `description says "${dm[0]}"`);
+      else if (f.parking && !/garage/i.test(f.parking) && /carport/i.test(f.parking)) add(label, 'fail', `carport, no garage (${f.parking})`);
+      else add(label, 'verify', f.parking ? `garage size not listed (Parking: ${f.parking})` : 'garage not listed');
+    }
+    return out;
+  }
+
+  function wants(f, cfg) {
     const d = f.description;
     const P = f.patio;
     const out = [];
-    const add = (key, name, state, why) => out.push({ key, name, state, points: POINTS[key][state], why });
+    const add = (key, name, state, why) => { if (cfg.wants[key].on) out.push({ key, name, state, points: state === 'unknown' ? 0 : cfg.wants[key][state], why }); };
 
     {
       const backInDesc = d.match(/screen(ed)?[- ]?(in )?(back|rear) (porch|patio|room)|(back|rear) screen(ed)?[- ]?(in )?(porch|patio|room)|screen(ed)?[- ]?(in )?(porch|patio|room|lanai)[^.]{0,60}\b(back ?yard|rear|back)\b/i);
@@ -304,12 +359,13 @@
     return out;
   }
 
-  function scoreListing(f) {
+  function scoreListing(f, config) {
+    const cfg = normalizeConfig(config);
     const upstairs = detectUpstairs(f);
-    const musts = mustHaves(f, upstairs);
-    const ws = wants(f);
+    const musts = mustHaves(f, upstairs, cfg);
+    const ws = wants(f, cfg);
     const score = ws.reduce((s, w) => s + w.points, 0);
-    const unknowns = ws.filter((w) => w.state === 'unknown' && POINTS[w.key].no !== 0).length + musts.filter((m) => m.status === 'verify').length;
+    const unknowns = ws.filter((w) => w.state === 'unknown' && cfg.wants[w.key].no !== 0).length + musts.filter((m) => m.status === 'verify').length;
     const verdict = musts.some((m) => m.status === 'fail') ? 'Rejected' : musts.some((m) => m.status === 'verify') ? 'Check' : 'Match';
     return {
       zpid: f.zpid, address: f.address, url: f.url, price: f.price, beds: f.beds,
@@ -319,9 +375,17 @@
     };
   }
 
-  function scoreDocument(doc, url) {
+  function scoreDocument(doc, url, config) {
     const extras = jsonExtras(doc);
-    return scoreListing(parseListing(textLines(doc.body), { title: doc.title, url }, extras));
+    const facts = parseListing(textLines(doc.body), { title: doc.title, url }, extras);
+    return { ...scoreListing(facts, config), facts };
+  }
+
+  // Re-scores a saved result with another filter. Results saved before v1.1 have no facts and are returned as-is.
+  function rescore(saved, config) {
+    if (!saved.facts) return { ...saved, legacy: true };
+    const r = scoreListing(saved.facts, config);
+    return { ...saved, ...r, zpid: saved.zpid, address: saved.address || r.address, url: saved.url || r.url };
   }
 
   function searchListingUrls(doc) {
@@ -335,7 +399,7 @@
     return [...urls.values()];
   }
 
-  const api = { CRITERIA, POINTS, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras };
+  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseScorer = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "House Scorer for Zillow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Scores Zillow listings against Bruce's downsizing checklist.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "unlimitedStorage"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "Open House Scorer report" },
+  "options_page": "filters.html",
   "content_scripts": [
     {
       "matches": ["https://www.zillow.com/*"],
-      "js": ["scorer.js", "content.js"],
+      "js": ["scorer.js", "filters-store.js", "content.js"],
       "run_at": "document_idle"
     }
   ]

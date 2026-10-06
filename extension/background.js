@@ -14,6 +14,9 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       case 'openReport':
         await chrome.tabs.create({ url: reportUrl() });
         return reply({});
+      case 'openFilters':
+        await chrome.tabs.create({ url: chrome.runtime.getURL('filters.html') });
+        return reply({});
       case 'openScan': {
         const t = await chrome.tabs.create({ url: msg.url, active: false, index: sender.tab.index + 1 });
         tabs[t.id] = sender.tab.id;

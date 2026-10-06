@@ -5,11 +5,15 @@
   <title>House Scorer report</title>
 </head>
 <body>
-  <div style="margin-bottom:14px">
-    <button id="refresh" style="font-size:16px;padding:6px 14px">Refresh</button>
+  <div style="margin-bottom:14px;font-size:17px">
+    <label>Filter in use: <select id="filter" style="font-size:16px;padding:4px"></select></label>
+    <button id="edit" style="font-size:16px;padding:6px 14px;margin-left:8px">See / change filters</button>
+    <button id="refresh" style="font-size:16px;padding:6px 14px;margin-left:8px">Refresh</button>
     <button id="clear" style="font-size:16px;padding:6px 14px;margin-left:8px">Clear all results</button>
   </div>
   <div id="report">Loading…</div>
+  <script src="scorer.js"></script>
+  <script src="filters-store.js"></script>
   <script src="report.js"></script>
   <script src="results.js"></script>
 </body>

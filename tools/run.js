@@ -22,4 +22,4 @@ for (const r of R.sortResults(results)) {
   r.musts.filter(m => m.status !== 'pass').forEach(m => console.log(`   MUST ${m.status}: ${m.name}: ${m.detail}`));
   r.wants.forEach(w => console.log(`   ${w.name}: ${w.state} ${w.points} | ${w.why}`));
 }
-fs.writeFileSync(ROOT + '/samples/sample_report.html', R.renderPage(results, 'Sample run on 11 saved listings'));
+fs.writeFileSync(ROOT + '/samples/sample_report.html', R.renderPage(results, 'Sample run on saved listings'));

@@ -33,6 +33,44 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(1500);
     await report.screenshot({ path: ROOT + '/samples/shot_report.png', fullPage: true });
     console.log('report h1:', await report.$eval('h1', (e) => e.innerText));
+    // KEEP / NO marks and notes
+    const clickMark = (section, idx, act) => report.evaluate((section, idx, act) => {
+      const tables = document.querySelectorAll('#report table');
+      tables[section].querySelectorAll('tbody tr')[idx].querySelector(`button[data-act="${act}"]`).click();
+    }, section, idx, act);
+    await clickMark(0, 0, 'no');
+    await sleep(800);
+    await clickMark(0, 0, 'keep');
+    await sleep(800);
+    await report.type('#report table tbody tr.kept textarea.cmt', 'Nice yard, ask about the porch');
+    await sleep(1200);
+    await report.reload();
+    await sleep(1500);
+    console.log('after marks h1:', await report.$eval('h1', (e) => e.innerText));
+    console.log('sections:', await report.$$eval('#report h2', (els) => els.map((e) => e.innerText)));
+    console.log('saved note:', await report.$eval('tr.kept textarea.cmt', (e) => e.value));
+    await report.screenshot({ path: ROOT + '/samples/shot_report_marks.png', fullPage: true });
+
+    // Filters page: edit, save under a new name (answering the name prompt)
+    const fp = await browser.newPage();
+    await fp.goto(report.url().replace('results.html', 'filters.html'));
+    await sleep(1000);
+    await fp.screenshot({ path: ROOT + '/samples/shot_filters.png', fullPage: true });
+    await fp.$eval('[data-path="sqft.maxNoUpstairs"]', (e) => { e.value = '2100'; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    await fp.$eval('[data-path="wants.sprinkler.on"]', (e) => { e.click(); });
+    fp.once('dialog', (d) => { console.log('prompt:', d.message()); d.accept('Inside'); });
+    await fp.click('#saveAs');
+    await sleep(1000);
+    console.log('filters msg:', await fp.$eval('#msg', (e) => e.innerText), '| options:', await fp.$$eval('#sets option', (o) => o.map((x) => x.textContent)));
+    await fp.screenshot({ path: ROOT + '/samples/shot_filters_saved.png', fullPage: true });
+    await report.bringToFront();
+    await sleep(1000);
+    console.log('report with Inside:', await report.$eval('h1', (e) => e.innerText), '| sub:', await report.$eval('.sub', (e) => e.innerText));
+    console.log('columns:', await report.$$eval('#report table:first-of-type th', (t) => t.map((x) => x.innerText.split('\n')[0]).join(', ')));
+    await report.screenshot({ path: ROOT + '/samples/shot_report_inside.png', fullPage: true });
+    await report.select('#filter', 'Original checklist');
+    await sleep(1000);
+    console.log('report with Original:', await report.$eval('h1', (e) => e.innerText));
   } else console.log('no report tab; urls:', pages.map((p) => p.url()));
   const lp = await browser.newPage();
   await lp.goto('https://www.zillow.com/homedetails/1296-Winyah-St-Sumter-SC-29150/116199395_zpid/', { waitUntil: 'domcontentloaded' });
