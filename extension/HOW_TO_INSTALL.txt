@@ -1,0 +1,28 @@
+HOUSE SCORER FOR ZILLOW - how to install (one time, about 2 minutes)
+
+1. Unzip this file. Right-click the zip > "Extract All..." and put the folder
+   somewhere permanent, e.g. Documents\house-scorer. (Don't delete the folder
+   later; Chrome runs the add-on from it.)
+2. In Chrome, type   chrome://extensions   in the address bar and press Enter.
+3. Turn ON "Developer mode" (the switch in the top-right corner).
+4. Click "Load unpacked" (top-left) and pick the house-scorer folder
+   (the one that contains manifest.json).
+5. Optional: click the puzzle-piece icon next to the address bar and pin
+   "House Scorer for Zillow". Clicking its icon opens your report.
+
+HOW TO USE
+- Go to zillow.com and run your search as usual (town, price, 3 bd, 2+ ba).
+- A "House Scorer" box appears at the bottom-left of the page.
+- Click "Score all houses in this search". It opens each listing in a
+  background tab for a few seconds, one after another, then closes it.
+  Expect about 10 seconds per house. You can keep using other programs.
+- When it's done, the report opens with the houses ranked by score.
+- If Zillow shows a "Press & Hold" check, do it in the tab it opens, then
+  click "Resume scoring".
+- If the search has more than one page, click "Next page" at the bottom of
+  Zillow's list and click the button again. Houses already scored today are
+  skipped, and the report collects them all.
+- Opening any single listing also shows its score in the box.
+
+Each house is re-read once a day, so new listings and price changes show up.
+"Clear all results" on the report page starts fresh.
