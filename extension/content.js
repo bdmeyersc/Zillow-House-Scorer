@@ -27,8 +27,9 @@
     return 'timeout';
   }
 
-  function scoreThisPage() {
-    const r = S.scoreDocument(document, location.href.split(/[?#]/)[0]);
+  async function scoreThisPage() {
+    const { cfg } = await window.HouseFilters.load();
+    const r = S.scoreDocument(document, location.href.split(/[?#]/)[0], cfg);
     if (!r.zpid || r.zpid === r.address) r.zpid = zpidOf(location.href) || r.address;
     return r;
   }
@@ -45,7 +46,7 @@
     const zpid = zpidOf(location.href);
     if (status === 'ok') {
       await sleep(1500);
-      const r = scoreThisPage();
+      const r = await scoreThisPage();
       await saveScore(r);
       await chrome.storage.local.set({ scanResult: { zpid, status: 'ok', at: Date.now(), tabId } });
     } else {
@@ -87,22 +88,40 @@
     if (isListing()) box.appendChild(button('Score this house', scoreListingNow));
     else box.appendChild(button('Score all houses in this search', () => scoreSearch()));
     box.appendChild(button('Open report', () => send({ type: 'openReport' }), false));
+    box.appendChild(button('See / change filters', () => send({ type: 'openFilters' }), false));
   }
 
-  function verdictText(r) {
+  // Score from the report, re-scored with the filter in use, plus the user's KEEP/NO mark and note.
+  async function savedText(zpid) {
+    const [{ scores = {}, marks = {} }, filters] = await Promise.all([chrome.storage.local.get(['scores', 'marks']), window.HouseFilters.load()]);
+    if (!scores[zpid]) return null;
+    const m = marks[zpid] || {};
+    const esc = (t) => String(t).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+    const mark = m.mark ? `<div style="margin-top:4px;font-weight:700;color:${m.mark === 'keep' ? '#13692a' : '#a11'}">You marked it ${m.mark === 'keep' ? 'KEEP' : 'NO'}</div>` : '';
+    const note = m.comment ? `<div style="font-size:13px;white-space:pre-wrap;margin-top:2px">Note: ${esc(m.comment)}</div>` : '';
+    return verdictText(S.rescore(scores[zpid], filters.cfg), filters.active) + mark + note;
+  }
+
+  function filterLine(name) {
+    return name ? `<div style="font-size:13px;color:#555;margin-bottom:2px">Filter: <b>${String(name).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)}</b></div>` : '';
+  }
+
+  const escHtml = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
+  function verdictText(r, filterName) {
     const color = r.verdict === 'Match' ? '#13692a' : r.verdict === 'Check' ? '#7a5600' : '#a11';
-    const notes = r.musts.filter((m) => m.status !== 'pass').map((m) => `<div style="font-size:13px;color:${m.status === 'fail' ? '#a11' : '#7a5600'}">${m.status === 'fail' ? 'No' : 'Check'}: ${m.name}: ${m.detail}</div>`).join('');
-    const wants = r.wants.map((w) => `<div style="font-size:13px">${w.name}: <b>${({ yes: 'Yes', partial: 'Partly', unknown: '?', no: 'No' })[w.state]}</b> (${w.points > 0 ? '+' : ''}${w.points})</div>`).join('');
-    return `<div style="font-size:22px;font-weight:700">Score ${r.score} <span style="font-size:15px;color:${color}">${r.verdict}</span></div>${notes}<div style="margin-top:4px">${wants}</div>`;
+    const notes = r.musts.filter((m) => m.status !== 'pass').map((m) => `<div style="font-size:13px;color:${m.status === 'fail' ? '#a11' : '#7a5600'}">${m.status === 'fail' ? 'No' : 'Check'}: ${escHtml(m.name)}: ${escHtml(m.detail)}</div>`).join('');
+    const wants = r.wants.map((w) => `<div style="font-size:13px">${escHtml(w.name)}: <b>${({ yes: 'Yes', partial: 'Partly', unknown: '?', no: 'No' })[w.state]}</b> (${w.points > 0 ? '+' : ''}${w.points})</div>`).join('');
+    return `${filterLine(filterName)}<div style="font-size:22px;font-weight:700">Score ${r.score} <span style="font-size:15px;color:${color}">${r.verdict}</span></div>${notes}<div style="margin-top:4px">${wants}</div>`;
   }
 
   async function scoreListingNow() {
     setStatus('Reading this listing…');
     const st = await waitForFacts(15000);
     if (st !== 'ok') { setStatus(st === 'blocked' ? 'Zillow is asking you to prove you are human. Do the "Press & Hold", then try again.' : "Couldn't find the Facts & features section on this page."); return; }
-    const r = scoreThisPage();
+    const r = await scoreThisPage();
     await saveScore(r);
-    setStatus(verdictText(r) + '<div style="font-size:13px;margin-top:4px;color:#555">Saved to the report.</div>');
+    setStatus((await savedText(r.zpid) || verdictText(r)) + '<div style="font-size:13px;margin-top:4px;color:#555">Saved to the report.</div>');
   }
 
   function scrollableAncestor(el) {
@@ -146,7 +165,7 @@
     setStatus('Finding houses in these results…');
     const urls = await collectSearchUrls();
     const { scores = {} } = await chrome.storage.local.get('scores');
-    const fresh = (u) => { const s = scores[zpidOf(u)]; return s && Date.now() - s.scoredAt < CACHE_HOURS * 3600e3; };
+    const fresh = (u) => { const s = scores[zpidOf(u)]; return s && s.facts && Date.now() - s.scoredAt < CACHE_HOURS * 3600e3; };
     const todo = urls.filter((u) => !fresh(u));
     let done = 0, failed = 0;
     for (const url of todo) {
@@ -186,9 +205,8 @@
       lastUrl = location.href;
       renderButtons();
       if (isListing()) {
-        const z = zpidOf(location.href);
-        const { scores = {} } = await chrome.storage.local.get('scores');
-        if (scores[z]) setStatus(verdictText(scores[z]) + '<div style="font-size:13px;margin-top:4px;color:#555">From the report. Click "Score this house" to re-read it.</div>');
+        const text = await savedText(zpidOf(location.href));
+        if (text) setStatus(text + '<div style="font-size:13px;margin-top:4px;color:#555">From the report. Click "Score this house" to re-read it.</div>');
         else scoreListingNow();
       } else if (!blockedTab) {
         setStatus('Set your Zillow filters, then click below.');
@@ -196,6 +214,9 @@
     };
     onUrl();
     setInterval(onUrl, 1000);
+    chrome.storage.onChanged.addListener((ch, area) => {
+      if (area === 'local' && (window.HouseFilters.isFilterChange(ch) || ch.marks) && isListing() && !scanning) { lastUrl = ''; onUrl(); }
+    });
   }
 
   init();

@@ -22,7 +22,14 @@ It runs in your own logged-in Chrome browser, because Zillow blocks automated ac
 | Shed / workshop | +15 | – | 0 | 0 |
 | Sprinkler system | +10 | – | 0 | 0 |
 
-Criteria and points are in `CRITERIA` / `POINTS` at the top of `extension/scorer.js`.
+These are the defaults (`DEFAULT_CONFIG` in `extension/scorer.js`). On the **Filters** page (`extension/filters.html`) you can change any value,
+turn individual criteria on or off, and save them as named presets (e.g. "Outside", "Inside"). Saved listing facts are re-scored with the
+filter in use, so changing a filter updates the report without rescanning Zillow.
+
+## Report marks
+
+Each report row has **KEEP** / **NO** buttons and a notes box. NO moves the house to a "Manually Excluded" section at the bottom.
+Marks and notes are stored separately from scores (`marks` in `chrome.storage.local`), so they survive rescans and "Clear all results".
 
 ## How it reads a listing
 
@@ -40,7 +47,9 @@ click "Load unpacked", and select the `extension` folder.
 - `extension/report.js`: builds the ranked report HTML
 - `extension/content.js`: the on-page House Scorer box, plus the search scan (one background tab per listing)
 - `extension/background.js`: opens and closes the scan tabs and opens the report
-- `extension/results.html` / `results.js`: the report page
+- `extension/results.html` / `results.js`: the report page, with KEEP / NO and notes
+- `extension/filters.html` / `filters.js`: the filter editor
+- `extension/filters-store.js`: saved filter presets
 
 ## Offline testing
 

@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>House Scorer filters</title>
+  <style>
+    body{font-family:Segoe UI,Arial,sans-serif;font-size:17px;margin:20px;color:#1d2433;background:#f6f7fb;max-width:980px}
+    h1{font-size:28px;margin:0 0 10px} h2{font-size:22px;margin:26px 0 8px}
+    .bar{background:#fff;padding:12px 14px;box-shadow:0 1px 3px #0002;border-radius:8px}
+    select,input{font-size:16px;padding:4px}
+    input[type=number]{width:110px}
+    input[type=checkbox]{width:20px;height:20px;vertical-align:middle}
+    button{font:600 16px Segoe UI,Arial,sans-serif;padding:7px 14px;border-radius:6px;cursor:pointer;border:1px solid #2a3f6b;background:#fff;color:#2a3f6b;margin:4px 6px 4px 0}
+    button.primary{background:#0b5ad6;color:#fff}
+    button:disabled{opacity:.5;cursor:default}
+    table{border-collapse:collapse;width:100%;background:#fff;box-shadow:0 1px 3px #0002}
+    th,td{border-bottom:1px solid #e3e6ee;padding:10px 8px;text-align:left}
+    th{background:#2a3f6b;color:#fff;font-weight:600}
+    tr.off td:not(:first-child){opacity:.4}
+    .hint{color:#555;font-size:15px}
+    #msg{font-weight:600;color:#13692a;min-height:22px;margin-top:6px}
+    #msg.warn{color:#a11}
+  </style>
+</head>
+<body>
+  <h1>House Scorer filters</h1>
+  <div class="bar">
+    <label>Filter in use: <select id="sets"></select></label>
+    <div style="margin-top:8px">
+      <button id="save" class="primary">Save changes</button>
+      <button id="saveAs">Save as a new filter…</button>
+      <button id="rename">Rename…</button>
+      <button id="delete">Delete this filter</button>
+      <button id="report">Open report</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <h2>Must-haves</h2>
+  <div class="hint">A house that clearly fails a checked must-have goes to "Ruled out". Uncheck one to ignore it.</div>
+  <table id="musts"></table>
+
+  <h2>Wants (points)</h2>
+  <div class="hint">Points added (or taken away, if negative) when the listing shows the feature. If the listing doesn't say, it scores 0. Uncheck a row to leave it out of the score and the report.</div>
+  <table id="wants"></table>
+  <p><b>Highest possible score: <span id="max"></span></b></p>
+  <button id="original">Put back the original values</button>
+  <p class="hint">Saving updates the report right away, with no need to rescan Zillow.</p>
+
+  <script src="scorer.js"></script>
+  <script src="filters-store.js"></script>
+  <script src="filters.js"></script>
+</body>
+</html>
