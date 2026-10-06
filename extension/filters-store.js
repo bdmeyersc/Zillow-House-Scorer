@@ -10,24 +10,28 @@
     return { sets, active, cfg: S.normalizeConfig(sets[active]) };
   }
 
-  async function saveSet(name, cfg) {
+  // Read-modify-write of shared storage keys, serialized across all open extension pages.
+  const withLock = (fn) => navigator.locks.request('house-scorer-storage', fn);
+
+  const saveSet = (name, cfg, replaceName) => withLock(async () => {
     const { sets } = await load();
     sets[name] = S.normalizeConfig(cfg);
+    if (replaceName && replaceName !== name) delete sets[replaceName];
     await chrome.storage.local.set({ filterSets: sets, activeFilter: name });
-  }
+  });
 
   const setActive = (name) => chrome.storage.local.set({ activeFilter: name });
 
-  async function deleteSet(name) {
+  const deleteSet = (name) => withLock(async () => {
     const { sets, active } = await load();
     delete sets[name];
     const names = Object.keys(sets);
     if (!names.length) return false;
     await chrome.storage.local.set({ filterSets: sets, activeFilter: active === name ? names[0] : active });
     return true;
-  }
+  });
 
   const isFilterChange = (ch) => !!(ch.filterSets || ch.activeFilter);
 
-  root.HouseFilters = { DEFAULT_NAME, load, saveSet, setActive, deleteSet, isFilterChange };
+  root.HouseFilters = { DEFAULT_NAME, load, saveSet, setActive, deleteSet, isFilterChange, withLock };
 })(typeof self !== 'undefined' ? self : this);

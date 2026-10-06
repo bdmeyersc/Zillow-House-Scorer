@@ -24,11 +24,19 @@ async function render() {
   window.scrollTo(0, y);
 }
 
-async function updateMark(zpid, change) {
+const updateMark = (zpid, change) => HouseFilters.withLock(async () => {
   const { marks = {} } = await chrome.storage.local.get('marks');
   const m = { ...(marks[zpid] || {}), ...change, updatedAt: Date.now() };
   if (!m.mark && !m.comment) delete marks[zpid]; else marks[zpid] = m;
   await chrome.storage.local.set({ marks });
+});
+
+// Show notes typed in another report tab without rebuilding the rows.
+function syncNotes(marks) {
+  el.querySelectorAll('[data-zpid] textarea.cmt').forEach((ta) => {
+    const c = ((marks || {})[ta.closest('[data-zpid]').dataset.zpid] || {}).comment || '';
+    if (ta !== document.activeElement && ta.value !== c) ta.value = c;
+  });
 }
 
 el.addEventListener('click', (e) => {
@@ -59,5 +67,6 @@ chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local') return;
   // Comment edits don't re-render, so typing isn't interrupted.
   if (ch.scores || HouseFilters.isFilterChange(ch) || (ch.marks && markSig(ch.marks.newValue) !== lastMarkSig)) render();
+  else if (ch.marks) syncNotes(ch.marks.newValue);
 });
 render();

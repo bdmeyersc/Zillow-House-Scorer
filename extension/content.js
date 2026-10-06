@@ -106,10 +106,12 @@
     return name ? `<div style="font-size:13px;color:#555;margin-bottom:2px">Filter: <b>${String(name).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`)}</b></div>` : '';
   }
 
+  const escHtml = (t) => String(t ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+
   function verdictText(r, filterName) {
     const color = r.verdict === 'Match' ? '#13692a' : r.verdict === 'Check' ? '#7a5600' : '#a11';
-    const notes = r.musts.filter((m) => m.status !== 'pass').map((m) => `<div style="font-size:13px;color:${m.status === 'fail' ? '#a11' : '#7a5600'}">${m.status === 'fail' ? 'No' : 'Check'}: ${m.name}: ${m.detail}</div>`).join('');
-    const wants = r.wants.map((w) => `<div style="font-size:13px">${w.name}: <b>${({ yes: 'Yes', partial: 'Partly', unknown: '?', no: 'No' })[w.state]}</b> (${w.points > 0 ? '+' : ''}${w.points})</div>`).join('');
+    const notes = r.musts.filter((m) => m.status !== 'pass').map((m) => `<div style="font-size:13px;color:${m.status === 'fail' ? '#a11' : '#7a5600'}">${m.status === 'fail' ? 'No' : 'Check'}: ${escHtml(m.name)}: ${escHtml(m.detail)}</div>`).join('');
+    const wants = r.wants.map((w) => `<div style="font-size:13px">${escHtml(w.name)}: <b>${({ yes: 'Yes', partial: 'Partly', unknown: '?', no: 'No' })[w.state]}</b> (${w.points > 0 ? '+' : ''}${w.points})</div>`).join('');
     return `${filterLine(filterName)}<div style="font-size:22px;font-weight:700">Score ${r.score} <span style="font-size:15px;color:${color}">${r.verdict}</span></div>${notes}<div style="margin-top:4px">${wants}</div>`;
   }
 

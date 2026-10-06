@@ -54,6 +54,9 @@ function refreshLooks() {
 
 function problems(cfg) {
   const p = [];
+  const blank = [...document.querySelectorAll('input[type=number][data-path]')]
+    .filter((i) => i.closest('tr').querySelector('input[type=checkbox]').checked && (i.value.trim() === '' || !Number.isFinite(Number(i.value))));
+  if (blank.length) p.push(`${blank.length === 1 ? 'a number box is' : blank.length + ' number boxes are'} empty (${[...new Set(blank.map((i) => i.closest('tr').querySelector('b').textContent))].join(', ')})`);
   if (cfg.price.on && cfg.price.min > cfg.price.max) p.push('lowest price is above the highest price');
   if (cfg.beds.on && cfg.beds.min > cfg.beds.max) p.push('bedrooms "from" is above "to"');
   if (cfg.sqft.on && cfg.sqft.min > Math.max(cfg.sqft.maxNoUpstairs, cfg.sqft.maxUpstairs)) p.push('minimum square feet is above both maximums');
@@ -112,9 +115,7 @@ $('rename').onclick = async () => {
   if (!name || name === old) return;
   const cfg = dirty ? readForm() : state.cfg;
   if (!checked(cfg)) return;
-  await HouseFilters.saveSet(name, cfg);
-  await HouseFilters.deleteSet(old);
-  await HouseFilters.setActive(name);
+  await HouseFilters.saveSet(name, cfg, old);
   await load(`Renamed to "${name}".`);
 };
 
