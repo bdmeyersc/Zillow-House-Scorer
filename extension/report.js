@@ -3,10 +3,27 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const money = (n) => (n == null ? '?' : '$' + Math.round(n).toLocaleString('en-US'));
   const STATE_LABEL = { yes: 'Yes', partial: 'Partly', unknown: '?', no: 'No' };
+  const TOWNS = ['Manning', 'Santee', 'Sumter', 'Dalzell', 'Conway', 'Longs', 'Loris', 'Little River'];
+  const NO_TOWN = 'Town not listed';
+  const townName = (r) => {
+    const t = r.town || S.townOf(r.address);
+    return t ? (TOWNS.find((x) => x.toLowerCase() === t.toLowerCase()) || t) : NO_TOWN;
+  };
+
+  // [{ name, count }]: the usual towns first (even with no houses yet), then any others found, then houses with no town.
+  function townList(results) {
+    const counts = new Map(TOWNS.map((t) => [t, 0]));
+    results.forEach((r) => { const t = townName(r); counts.set(t, (counts.get(t) || 0) + 1); });
+    const rank = (t) => (t === NO_TOWN ? 2 : TOWNS.includes(t) ? 0 : 1);
+    return [...counts].map(([name, count]) => ({ name, count }))
+      .sort((a, b) => rank(a.name) - rank(b.name) || (rank(a.name) ? a.name.localeCompare(b.name) : TOWNS.indexOf(a.name) - TOWNS.indexOf(b.name)));
+  }
 
   const STYLE = `
   body{font-family:Segoe UI,Arial,sans-serif;font-size:17px;margin:20px;color:#1d2433;background:#f6f7fb}
-  h1{font-size:28px;margin:0 0 4px} h2{font-size:22px;margin:28px 0 8px}
+  h1{font-size:28px;margin:0 0 4px} h2{font-size:22px;margin:28px 0 8px} h3{font-size:20px;margin:22px 0 8px}
+  h2.town{font-size:26px;background:#2a3f6b;color:#fff;padding:8px 14px;border-radius:8px;margin-top:36px}
+  .towns{margin:0 0 14px;font-size:16px} .towns a{margin-right:14px}
   .sub{color:#555;margin-bottom:14px}
   table{border-collapse:collapse;width:100%;background:#fff;box-shadow:0 1px 3px #0002}
   th,td{border-bottom:1px solid #e3e6ee;padding:10px 8px;text-align:left;vertical-align:top}
@@ -22,7 +39,7 @@
   .legend{font-size:15px;color:#444;margin:10px 0 18px}
   tr.kept td{background:#eefaf0}
   tr.excluded td{background:#f3f3f3;color:#666}
-  td.mine{width:210px}
+  td.mine{width:210px} td.house{min-width:210px}
   .mk{font:700 15px Segoe UI,Arial,sans-serif;padding:5px 12px;border-radius:6px;cursor:pointer;border:2px solid #999;background:#fff;color:#555;margin:0 4px 6px 0}
   .mk.keep.on{background:#13692a;border-color:#13692a;color:#fff}
   .mk.no.on{background:#a11;border-color:#a11;color:#fff}
@@ -62,7 +79,7 @@
       <td class="score">${r.score}</td>
       <td><span class="tag ${r.verdict}">${r.verdict}</span></td>
       ${mineCell(r, m, ctx.interactive)}
-      <td><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a><div>${money(r.price)} · ${r.beds ?? '?'} bd / ${r.baths ?? '?'} ba · ${r.sqft ? r.sqft.toLocaleString() : '?'} sq ft · upstairs room: ${up}</div><div class="notes">${notes}</div>${r.legacy ? '<div class="old">Scored by the old version with the original filter. Rescan to apply your current filter.</div>' : ''}</td>
+      <td class="house"><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a><div>${money(r.price)} · ${r.beds ?? '?'} bd / ${r.baths ?? '?'} ba · ${r.sqft ? r.sqft.toLocaleString() : '?'} sq ft · upstairs room: ${up}</div><div class="notes">${notes}</div>${r.legacy ? '<div class="old">Scored by the old version with the original filter. Rescan to apply your current filter.</div>' : ''}</td>
       ${ctx.wantCols.map((w) => wantCell(r, w.key)).join('')}
     </tr>`;
   }
@@ -83,24 +100,40 @@
     const marks = opts.marks || {};
     const ctx = { cfg, marks, interactive: !!opts.interactive, max: S.maxScore(cfg), wantCols: S.WANTS.filter((w) => cfg.wants[w.key].on) };
     const isNo = (r) => (marks[r.zpid] || {}).mark === 'no';
-    const keep = sortResults(results.filter((r) => r.verdict !== 'Rejected' && !isNo(r)));
-    const rejected = sortResults(results.filter((r) => r.verdict === 'Rejected' && !isNo(r)));
-    const excluded = sortResults(results.filter(isNo));
+    const town = opts.town && opts.town !== 'all' ? opts.town : null;
+    const shown = town ? results.filter((r) => townName(r) === town) : results;
+    const split = (rs) => ({
+      keep: sortResults(rs.filter((r) => r.verdict !== 'Rejected' && !isNo(r))),
+      rejected: sortResults(rs.filter((r) => r.verdict === 'Rejected' && !isNo(r))),
+      excluded: sortResults(rs.filter(isNo)),
+    });
+    const sections = (g, H) => `${g.keep.length ? table(g.keep, ctx) : '<p>No houses passed yet.</p>'}
+      ${g.rejected.length ? `<${H}>Ruled out (${g.rejected.length})</${H}>${table(g.rejected, ctx)}` : ''}
+      ${g.excluded.length ? `<${H}>Manually Excluded (${g.excluded.length})</${H}>${table(g.excluded, ctx)}` : ''}`;
+    const all = split(shown);
     const musts = S.describeMusts(cfg);
-    return `<h1>House Scorer: ${keep.length} possible, ${rejected.length} ruled out, ${excluded.length} manually excluded</h1>
-      <div class="sub">${results.length} listings scored${opts.filterName ? ` · filter: <b>${esc(opts.filterName)}</b>` : ''}${generatedAt ? ' · ' + esc(generatedAt) : ''}</div>
+    let body;
+    if (opts.groupByTown && !town) {
+      const towns = townList(shown).filter((t) => t.count);
+      const id = (i) => `town-${i}`;
+      body = `<div class="towns">Jump to: ${towns.map((t, i) => `<a href="#${id(i)}">${esc(t.name)} (${t.count})</a>`).join('')}</div>` +
+        towns.map((t, i) => {
+          const g = split(shown.filter((r) => townName(r) === t.name));
+          return `<h2 class="town" id="${id(i)}">${esc(t.name)}: ${g.keep.length} possible, ${g.rejected.length} ruled out, ${g.excluded.length} manually excluded</h2>${sections(g, 'h3')}`;
+        }).join('');
+    } else body = sections(all, 'h2');
+    return `<h1>House Scorer${town ? ` (${esc(town)})` : ''}: ${all.keep.length} possible, ${all.rejected.length} ruled out, ${all.excluded.length} manually excluded</h1>
+      <div class="sub">${shown.length} listings${town ? ` in ${esc(town)} (${results.length} in all towns)` : ' scored'}${opts.filterName ? ` · filter: <b>${esc(opts.filterName)}</b>` : ''}${generatedAt ? ' · ' + esc(generatedAt) : ''}</div>
       <div class="legend"><span class="tag Match">Match</span> meets every must-have &nbsp; <span class="tag Check">Check</span> a must-have isn't in the listing (call the agent or look at photos) &nbsp; <span class="tag Rejected">Rejected</span> fails a must-have<br>
       "?" means the listing doesn't say, which is worth 0 points. Must-haves: ${musts.length ? esc(musts.join(', ')) : 'none'}.${ctx.interactive ? '<br>Click <b>NO</b> to move a house to Manually Excluded (click it again to undo). Notes save as you type.' : ''}</div>
-      ${keep.length ? table(keep, ctx) : '<p>No houses passed yet.</p>'}
-      ${rejected.length ? `<h2>Ruled out (${rejected.length})</h2>${table(rejected, ctx)}` : ''}
-      ${excluded.length ? `<h2>Manually Excluded (${excluded.length})</h2>${table(excluded, ctx)}` : ''}`;
+      ${body}`;
   }
 
   function renderPage(results, generatedAt, opts) {
     return `<!doctype html><html><head><meta charset="utf-8"><title>House Scorer report</title><style>${STYLE}</style></head><body>${renderBody(results, generatedAt, opts)}</body></html>`;
   }
 
-  const api = { STYLE, renderBody, renderPage, sortResults };
+  const api = { STYLE, TOWNS, townList, townName, renderBody, renderPage, sortResults };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseReport = api;
 })(typeof self !== 'undefined' ? self : this);

@@ -7,9 +7,15 @@
 <body>
   <div style="margin-bottom:14px;font-size:17px">
     <label>Filter in use: <select id="filter" style="font-size:16px;padding:4px"></select></label>
+ <label style="margin-left:8px">Town: <select id="town" style="font-size:16px;padding:4px"></select></label>
+    <label style="margin-left:8px"><input type="checkbox" id="group" style="width:18px;height:18px;vertical-align:middle"> Group by town</label>
     <button id="edit" style="font-size:16px;padding:6px 14px;margin-left:8px">See / change filters</button>
     <button id="refresh" style="font-size:16px;padding:6px 14px;margin-left:8px">Refresh</button>
     <button id="clear" style="font-size:16px;padding:6px 14px;margin-left:8px">Clear all results</button>
+    <button id="backup" style="font-size:16px;padding:6px 14px;margin-left:8px" title="Save everything (houses, filters, marks and notes) to a file, for example in your Google Drive folder">Save backup</button>
+    <button id="restore" style="font-size:16px;padding:6px 14px;margin-left:8px" title="Add the houses, filters, marks and notes from a backup file to this PC">Load backup</button>
+    <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
+    <div id="backupMsg" style="font-weight:600;color:#13692a;margin-top:6px"></div>
   </div>
   <div id="report">Loading…</div>
   <script src="scorer.js"></script>
