@@ -12,7 +12,7 @@ It runs in your own logged-in Chrome browser, because Zillow blocks automated ac
 - 1,600–2,000 sq ft, or up to 2,350 sq ft if there is an upstairs room
 - Garage for at least 2 cars
 
-**Wants (scored, max 100).** "?" means the listing doesn't say and scores 0.
+**Wants (scored, max 145).** "?" means the listing doesn't say and scores 0.
 
 | Feature | Yes | Partly | ? | No |
 |---|---|---|---|---|
@@ -21,15 +21,34 @@ It runs in your own logged-in Chrome browser, because Zillow blocks automated ac
 | Patio for grilling | +20 | +10 (deck only) | 0 | −20 |
 | Shed / workshop | +15 | – | 0 | 0 |
 | Sprinkler system | +10 | – | 0 | 0 |
+| Well (water or irrigation) | +5 | – | 0 | 0 (city water) |
+| Dock | +10 | +5 (shared dock) | 0 | – |
+| Boat slip | +10 | – | 0 | – |
+| HOA | 0 (fee shown) | – | 0 | 0 (no HOA) |
+| Pool at the house | +10 | – | 0 | – |
+| Community pool | +5 | – | 0 | – |
+| Clubhouse | +5 | – | 0 | – |
 
 These are the defaults (`DEFAULT_CONFIG` in `extension/scorer.js`). On the **Filters** page (`extension/filters.html`) you can change any value,
 turn individual criteria on or off, and save them as named presets (e.g. "Outside", "Inside"). Saved listing facts are re-scored with the
 filter in use, so changing a filter updates the report without rescanning Zillow.
 
+## Towns
+
+The report keeps one list of every house scored, from every search. Each house's town comes from its address (`townOf` in `scorer.js`).
+The **Town** menu on the report shows one town at a time, and **Group by town** splits "All towns" into a section per town.
+The menu always lists Manning, Santee, Sumter, Dalzell, Conway, Longs, Loris and Little River (`TOWNS` in `report.js`), plus any other town that has scored houses.
+
 ## Report marks
 
 Each report row has **KEEP** / **NO** buttons and a notes box. NO moves the house to a "Manually Excluded" section at the bottom.
 Marks and notes are stored separately from scores (`marks` in `chrome.storage.local`), so they survive rescans and "Clear all results".
+
+## Backups and moving between PCs
+
+**Save backup** on the report writes `scores`, `marks`, `filterSets`, `activeFilter` and `filterTimes` to a JSON file (`HouseFilters.backupData`).
+**Load backup** merges a file in (`HouseFilters.mergeBackup`): for each house the newer `scoredAt` wins, for marks the newer `updatedAt`,
+for filters the newer save time (`filterTimes`). Nothing is deleted, and cleared marks are kept with a time so an older backup can't bring them back.
 
 ## How it reads a listing
 
@@ -53,7 +72,8 @@ click "Load unpacked", and select the `extension` folder.
 
 ## Offline testing
 
-Save listing pages from Chrome as "Webpage, Single File" (`.mhtml`) into `samples/` (git-ignored), then:
+`python3 tools/make_fixtures.py` writes made-up listings (several towns, the new features) into `samples/` along with the test certificate.
+To test with real pages instead, save listing pages from Chrome as "Webpage, Single File" (`.mhtml`) into `samples/` (git-ignored), then:
 
 ```
 python3 tools/extract_mhtml.py           # samples/*.mhtml -> samples/html/*.html

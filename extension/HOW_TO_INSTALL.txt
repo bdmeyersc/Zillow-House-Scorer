@@ -32,10 +32,28 @@ FILTERS (your own criteria)
 - The report re-scores every house right away with the filter in use;
   you don't need to rescan Zillow.
 
+TOWNS
+- Every house you score goes into the same report, from any search on any
+  day. Scoring a new town adds to the report; it doesn't replace anything.
+- Use the "Town" menu at the top of the report to see one town, or
+  "All towns". With "Group by town" ticked, All towns is split into a
+  section for each town.
+
 KEEP / NO AND NOTES
 - Each house in the report has KEEP and NO buttons and a notes box.
 - NO moves the house to "Manually Excluded" at the bottom. Click NO again
   to undo it. Notes save as you type.
+
+USING MORE THAN ONE PC (BACKUPS)
+- On the report page, click "Save backup" and save the file in your
+  Google Drive folder (for example G:\My Drive). It holds every scored
+  house, your filters, KEEP/NO marks and notes.
+- On the other PC, install the extension, open the report, click
+  "Load backup" and pick that file. It is added to what that PC already
+  has; for each house the newer score, mark and note wins. Nothing is
+  deleted.
+- To keep both PCs current, save a backup when you finish on one PC and
+  load it when you start on the other.
 
 UPDATING TO A NEW VERSION
 - Unzip the new version over the same folder (replace the files), then

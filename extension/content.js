@@ -61,7 +61,7 @@
 
   const panel = document.createElement('div');
   panel.id = 'house-scorer-panel';
-  panel.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:2147483647;background:#fff;border:2px solid #2a3f6b;border-radius:10px;padding:12px 14px;font:15px "Segoe UI",Arial,sans-serif;color:#1d2433;box-shadow:0 4px 16px rgba(0,0,0,.25);width:290px';
+  panel.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:2147483647;background:#fff;border:2px solid #2a3f6b;border-radius:10px;padding:12px 14px;font:15px "Segoe UI",Arial,sans-serif;color:#1d2433;box-shadow:0 4px 16px rgba(0,0,0,.25);width:290px;max-height:80vh;overflow-y:auto';
   panel.innerHTML = '<div style="font-weight:700;font-size:16px;margin-bottom:6px">House Scorer<span id="hs-min" title="Minimize" style="float:right;cursor:pointer;padding:0 4px">&#8211;</span></div><div id="hs-body"><div id="hs-status" style="margin-bottom:8px"></div><div id="hs-buttons"></div></div>';
   const $ = (id) => panel.querySelector('#' + id);
 

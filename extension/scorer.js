@@ -11,16 +11,30 @@
       patio: { on: true, yes: 20, partial: 10, no: -20 },
       shed: { on: true, yes: 15, partial: 0, no: 0 },
       sprinkler: { on: true, yes: 10, partial: 0, no: 0 },
+      well: { on: true, yes: 5, partial: 0, no: 0 },
+      dock: { on: true, yes: 10, partial: 5, no: 0 },
+      slip: { on: true, yes: 10, partial: 0, no: 0 },
+      hoa: { on: true, yes: 0, partial: 0, no: 0 },
+      pool: { on: true, yes: 10, partial: 0, no: 0 },
+      communityPool: { on: true, yes: 5, partial: 0, no: 0 },
+      clubhouse: { on: true, yes: 5, partial: 0, no: 0 },
     },
   };
 
-  // states: which outcomes the scorer can produce for each want (shed/sprinkler are bonus-only).
+  // states: which outcomes the scorer can produce for each want; hint explains them on the Filters page.
   const WANTS = [
     { key: 'screened', name: 'Screened porch on back', short: 'Screened back porch', states: ['yes', 'partial', 'no'] },
     { key: 'fence', name: 'Fenced backyard', short: 'Fenced backyard', states: ['yes', 'partial', 'no'] },
     { key: 'patio', name: 'Patio for grilling', short: 'Patio for grill', states: ['yes', 'partial', 'no'] },
     { key: 'shed', name: 'Shed / workshop', short: 'Shed / workshop', states: ['yes'] },
     { key: 'sprinkler', name: 'Sprinkler system', short: 'Sprinklers', states: ['yes'] },
+    { key: 'well', name: 'Well', short: 'Well', states: ['yes', 'no'], hint: 'Has it = well water or an irrigation well; Clearly missing = city water only' },
+    { key: 'dock', name: 'Dock', short: 'Dock', states: ['yes', 'partial'], hint: 'Partly = a shared or community dock' },
+    { key: 'slip', name: 'Boat slip', short: 'Boat slip', states: ['yes'] },
+    { key: 'hoa', name: 'HOA', short: 'HOA', states: ['yes', 'no'], hint: 'Has it = there is an HOA (the fee is shown in the report); Clearly missing = no HOA. Use a negative number to count against it.' },
+    { key: 'pool', name: 'Pool (at the house)', short: 'Pool', states: ['yes'], hint: 'The house has its own pool' },
+    { key: 'communityPool', name: 'Community pool', short: 'Community pool', states: ['yes'], hint: 'A neighborhood, HOA or community pool' },
+    { key: 'clubhouse', name: 'Clubhouse', short: 'Clubhouse', states: ['yes'] },
   ];
 
   // Fills in anything missing or invalid from DEFAULT_CONFIG.
@@ -35,7 +49,7 @@
     return fix(DEFAULT_CONFIG, c);
   }
 
-  const maxScore = (cfg) => WANTS.reduce((s, w) => s + (cfg.wants[w.key].on ? Math.max(0, cfg.wants[w.key].yes) : 0), 0);
+  const maxScore = (cfg) => WANTS.reduce((s, w) => s + (cfg.wants[w.key].on ? Math.max(0, ...w.states.map((st) => cfg.wants[w.key][st])) : 0), 0);
 
   const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'SVG', 'NOSCRIPT', 'TEMPLATE']);
 
@@ -97,6 +111,7 @@
     const p = props[0];
     const f = p.resoFacts;
     const j = (v) => (Array.isArray(v) ? v.join(', ') : v);
+    const yn = (v) => (v === true ? 'Yes' : v === false ? 'No' : v);
     const pairs = [
       ['Bedrooms', f.bedrooms ?? p.bedrooms], ['Bathrooms', f.bathrooms ?? p.bathrooms],
       ['Full bathrooms', f.bathroomsFull], ['1/2 bathrooms', f.bathroomsHalf],
@@ -107,6 +122,9 @@
       ['Patio & porch', j(f.patioAndPorchFeatures)], ['Fencing', f.fencing],
       ['Exterior features', j(f.exteriorFeatures)], ['Additional structures', j(f.otherStructures)],
       ['Lot features', j(f.lotFeatures)],
+      ['Water source', j(f.waterSource)], ['Has HOA', yn(f.hasAssociation)], ['HOA fee', f.associationFee],
+      ['Amenities included', j(f.associationAmenities)], ['Community features', j(f.communityFeatures)],
+      ['Pool features', j(f.poolFeatures)], ['Private pool', yn(f.hasPrivatePool)], ['Waterfront features', j(f.waterfrontFeatures)],
     ];
     return {
       lines: pairs.filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}: ${v}`),
@@ -356,7 +374,88 @@
       if (m) add('sprinkler', 'Sprinkler system', 'yes', m[0].trim());
       else add('sprinkler', 'Sprinkler system', 'unknown', 'none listed');
     }
+
+    // Fact lines whose label matches keyRe and whose value matches valRe.
+    const facts = (f.allFacts || '').split('\n');
+    const fact = (keyRe, valRe = /./) => facts.find((l) => { const i = l.indexOf(':'); return i > 0 && keyRe.test(l.slice(0, i)) && valRe.test(l.slice(i + 1)); });
+    const quote = (m) => `description: "${m[0].trim()}"`;
+
+    {
+      const w = fact(/^(water|water source|water information|irrigation|irrigation water)$/i, /\bwells?\b/i);
+      const pub = fact(/^(water|water source|water information)$/i, /public|city|municipal|county|community|utility/i);
+      const dm = d.match(/[^.]{0,25}\b(private well|well water|irrigation well|wells? for irrigation|on a well|deep well|shallow well)\b[^.]{0,20}/i);
+      if (w) add('well', 'Well', 'yes', w);
+      else if (dm) add('well', 'Well', 'yes', quote(dm));
+      else if (pub) add('well', 'Well', 'no', pub);
+      else add('well', 'Well', 'unknown', 'water source not listed');
+    }
+
+    {
+      const dockRe = /\bdocks?\b(?!ing)/i;
+      const shared = /community|shared|neighborhood|association|amenit/i;
+      const fl = fact(/./, dockRe);
+      const dm = d.match(/[^.]{0,30}\bdocks?\b(?!ing)[^.]{0,30}/i);
+      if (fl && !shared.test(fl)) add('dock', 'Dock', 'yes', fl);
+      else if (dm && !shared.test(dm[0])) add('dock', 'Dock', 'yes', quote(dm));
+      else if (fl || dm) add('dock', 'Dock', 'partial', fl || quote(dm));
+      else add('dock', 'Dock', 'unknown', 'none listed');
+    }
+
+    {
+      const slipRe = /(?<!non[- ])\bslips?\b(?![- ]?resist)/i;
+      const fl = fact(/./, slipRe);
+      const dm = d.match(/[^.]{0,30}\b(boat|deeded|private|marina|wet|dry) slips?\b[^.]{0,30}/i);
+      if (fl) add('slip', 'Boat slip', 'yes', fl);
+      else if (dm) add('slip', 'Boat slip', 'yes', quote(dm));
+      else add('slip', 'Boat slip', 'unknown', 'none listed');
+    }
+
+    {
+      const fee = fact(/^(hoa fee|hoa|association fee|association fees?)$/i, /\$\s*[1-9]/);
+      const has = fact(/^(has hoa|has association|association|hoa)$/i);
+      const noDesc = d.match(/\bno (hoa|homeowners?'? association)\b/i);
+      const dm = d.match(/[^.]{0,25}\b(hoa|homeowners?'? association)\b[^.]{0,25}/i);
+      if (fee) add('hoa', 'HOA', 'yes', fee);
+      else if (has && /^[^:]*:\s*(no|none)\b/i.test(has)) add('hoa', 'HOA', 'no', has);
+      else if (has && /^[^:]*:\s*yes\b/i.test(has)) add('hoa', 'HOA', 'yes', has + ' (fee not listed)');
+      else if (noDesc) add('hoa', 'HOA', 'no', quote(noDesc));
+      else if (dm) add('hoa', 'HOA', 'yes', quote(dm));
+      else add('hoa', 'HOA', 'unknown', 'HOA not listed');
+    }
+
+    {
+      const poolRe = /(?<!car ?)\bpools?\b(?! table)/i;
+      const shared = /community|neighborhood|association|amenit|shared|subdivision|resort|hoa/i;
+      const own = fact(/^(private pool|has private pool|pool features|pool)$/i, /^(?!\s*(no|none)\b)(?!.*(community|association|neighborhood|shared))/i);
+      const commFact = fact(/amenit|community|association|hoa/i, poolRe) || fact(/pool/i, shared);
+      const dms = [...d.matchAll(/[^.]{0,30}(?<!car ?)\bpools?\b(?! table)[^.]{0,30}/gi)].map((m) => m[0].trim());
+      const ownDesc = dms.find((t) => !shared.test(t) && /in-?ground|above-?ground|private|own|backyard|heated|saltwater|salt water|screened/i.test(t));
+      const commDesc = dms.find((t) => shared.test(t));
+      const vague = dms.find((t) => t !== ownDesc && t !== commDesc);
+      if (own) add('pool', 'Pool (at the house)', 'yes', own);
+      else if (ownDesc) add('pool', 'Pool (at the house)', 'yes', `description: "${ownDesc}"`);
+      else add('pool', 'Pool (at the house)', 'unknown', vague && !commFact && !commDesc ? `description: "${vague}" (check whether it is private)` : 'none listed');
+      if (commFact) add('communityPool', 'Community pool', 'yes', commFact);
+      else if (commDesc) add('communityPool', 'Community pool', 'yes', `description: "${commDesc}"`);
+      else if (vague && !own && !ownDesc) add('communityPool', 'Community pool', 'yes', `description: "${vague}" (check whether it is shared)`);
+      else add('communityPool', 'Community pool', 'unknown', 'none listed');
+    }
+
+    {
+      const re = /\bclub ?houses?\b/i;
+      const fl = fact(/./, re);
+      const dm = d.match(/[^.]{0,30}\bclub ?houses?\b[^.]{0,30}/i);
+      if (fl) add('clubhouse', 'Clubhouse', 'yes', fl);
+      else if (dm) add('clubhouse', 'Clubhouse', 'yes', quote(dm));
+      else add('clubhouse', 'Clubhouse', 'unknown', 'none listed');
+    }
     return out;
+  }
+
+  // "123 Main St, Little River, SC 29566" -> "Little River"
+  function townOf(address) {
+    const parts = String(address || '').split(',').map((x) => x.trim()).filter(Boolean);
+    return parts.length >= 3 ? parts[parts.length - 2] : '';
   }
 
   function scoreListing(f, config) {
@@ -368,7 +467,7 @@
     const unknowns = ws.filter((w) => w.state === 'unknown' && cfg.wants[w.key].no !== 0).length + musts.filter((m) => m.status === 'verify').length;
     const verdict = musts.some((m) => m.status === 'fail') ? 'Rejected' : musts.some((m) => m.status === 'verify') ? 'Check' : 'Match';
     return {
-      zpid: f.zpid, address: f.address, url: f.url, price: f.price, beds: f.beds,
+      zpid: f.zpid, address: f.address, town: townOf(f.address), url: f.url, price: f.price, beds: f.beds,
       baths: f.fullBaths != null ? f.fullBaths + f.threeQBaths + 0.5 * f.halfBaths : f.bathsTotal,
       sqft: f.sqft, upstairs, musts, wants: ws, score, unknowns, verdict,
       description: f.description,
@@ -383,9 +482,10 @@
 
   // Re-scores a saved result with another filter. Results saved before v1.1 have no facts and are returned as-is.
   function rescore(saved, config) {
-    if (!saved.facts) return { ...saved, legacy: true };
+    if (!saved.facts) return { ...saved, town: townOf(saved.address), legacy: true };
     const r = scoreListing(saved.facts, config);
-    return { ...saved, ...r, zpid: saved.zpid, address: saved.address || r.address, url: saved.url || r.url };
+    const address = saved.address || r.address;
+    return { ...saved, ...r, zpid: saved.zpid, address, town: townOf(address), url: saved.url || r.url };
   }
 
   function searchListingUrls(doc) {
@@ -399,7 +499,7 @@
     return [...urls.values()];
   }
 
-  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras };
+  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseScorer = api;
 })(typeof self !== 'undefined' ? self : this);

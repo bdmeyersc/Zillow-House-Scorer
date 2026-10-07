@@ -21,7 +21,7 @@ function buildTables() {
     `<tr data-row="${m.key}"><td><input type="checkbox" data-path="${m.key}.on"></td><td><b>${m.label}</b></td><td>${m.parts.map((p) =>
       typeof p === 'string' ? esc(p) : `<input type="number" step="${p[1]}" data-path="${m.key}.${p[0]}">`).join(' ')}</td></tr>`).join('');
   $('wants').innerHTML = '<tr><th>Use</th><th>Feature</th>' + ['yes', 'partial', 'no'].map((s) => `<th>${STATE_LABEL[s]}</th>`).join('') + '</tr>' +
-    S.WANTS.map((w) => `<tr data-row="wants.${w.key}"><td><input type="checkbox" data-path="wants.${w.key}.on"></td><td><b>${w.name}</b></td>${['yes', 'partial', 'no'].map((s) =>
+    S.WANTS.map((w) => `<tr data-row="wants.${w.key}"><td><input type="checkbox" data-path="wants.${w.key}.on"></td><td><b>${w.name}</b>${w.hint ? `<div class="hint">${esc(w.hint)}</div>` : ''}</td>${['yes', 'partial', 'no'].map((s) =>
       `<td>${w.states.includes(s) ? `<input type="number" step="5" data-path="wants.${w.key}.${s}">` : '<span class="hint">n/a</span>'}</td>`).join('')}</tr>`).join('');
 }
 

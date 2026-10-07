@@ -33,6 +33,16 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(1500);
     await report.screenshot({ path: ROOT + '/samples/shot_report.png', fullPage: true });
     console.log('report h1:', await report.$eval('h1', (e) => e.innerText));
+    console.log('town options:', await report.$$eval('#town option', (o) => o.map((x) => x.textContent).join(', ')));
+    console.log('town sections:', await report.$$eval('#report h2.town', (els) => els.map((e) => e.innerText)));
+    await report.select('#town', 'Conway');
+    await sleep(800);
+    console.log('Conway only:', await report.$eval('h1', (e) => e.innerText), '| rows:', await report.$$eval('#report tbody tr', (r) => r.length));
+    await report.screenshot({ path: ROOT + '/samples/shot_report_conway.png', fullPage: true });
+    await report.select('#town', 'all');
+    await report.click('#group');
+    await sleep(800);
+    console.log('ungrouped town sections:', await report.$$eval('#report h2.town', (els) => els.length));
     // KEEP / NO marks and notes
     const clickMark = (section, idx, act) => report.evaluate((section, idx, act) => {
       const tables = document.querySelectorAll('#report table');
@@ -46,7 +56,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(1200);
     // simultaneous writes for two houses must both survive
     await report.evaluate(() => {
-      const rows = document.querySelectorAll('#report table')[1].querySelectorAll('tbody tr');
+      const rows = document.querySelectorAll('#report table')[0].querySelectorAll('tbody tr:not(.kept)');
       rows[0].querySelector('button[data-act="keep"]').click();
       const ta = rows[1].querySelector('textarea.cmt');
       ta.value = 'Carport only';
@@ -62,6 +72,22 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     console.log('sections:', await report.$$eval('#report h2', (els) => els.map((e) => e.innerText)));
     console.log('saved note:', await report.$eval('tr.kept textarea.cmt', (e) => e.value));
     await report.screenshot({ path: ROOT + '/samples/shot_report_marks.png', fullPage: true });
+
+    // Backup: save, wipe houses and a note, merge back in
+    console.log('backup merge:', JSON.stringify(await report.evaluate(async () => {
+      const backup = JSON.parse(JSON.stringify(await HouseFilters.backupData()));
+      const { marks } = await chrome.storage.local.get('marks');
+      const z = Object.keys(marks)[0];
+      marks[z] = { ...marks[z], comment: 'newer note on this PC', updatedAt: Date.now() + 1000 };
+      await chrome.storage.local.set({ scores: {}, marks });
+      const counts = await HouseFilters.mergeBackup(backup);
+      const after = await chrome.storage.local.get(['scores', 'marks']);
+      let bad = null;
+      try { await HouseFilters.mergeBackup({ foo: 1 }); } catch (e) { bad = e.message; }
+      return { counts, houses: Object.keys(after.scores).length, keptNewerNote: after.marks[z].comment, bad };
+    })));
+    await sleep(1000);
+    console.log('after restore h1:', await report.$eval('h1', (e) => e.innerText));
 
     // Filters page: edit, save under a new name (answering the name prompt)
     const fp = await browser.newPage();
