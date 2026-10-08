@@ -5,6 +5,7 @@
     baths: { on: true, minFull: 2 },
     sqft: { on: true, min: 1600, maxNoUpstairs: 2000, maxUpstairs: 2350 },
     garage: { on: true, min: 2 },
+    leased: { on: true },
     wants: {
       screened: { on: true, yes: 30, partial: 15, no: -30 },
       fence: { on: true, yes: 25, partial: 10, no: -25 },
@@ -31,7 +32,7 @@
     { key: 'well', name: 'Well', short: 'Well', states: ['yes', 'no'], hint: 'Has it = well water or an irrigation well; Clearly missing = city water only' },
     { key: 'dock', name: 'Dock', short: 'Dock', states: ['yes', 'partial'], hint: 'Partly = a shared or community dock' },
     { key: 'slip', name: 'Boat slip', short: 'Boat slip', states: ['yes'] },
-    { key: 'hoa', name: 'HOA', short: 'HOA', states: ['yes', 'no'], hint: 'Has it = there is an HOA (the fee is shown in the report); Clearly missing = no HOA. Use a negative number to count against it.' },
+    { key: 'hoa', name: 'HOA', short: 'HOA', states: ['yes', 'no'], hint: 'Has it = there is an HOA (its fee is shown next to it); Clearly missing = no HOA. Use a negative number to count against it.' },
     { key: 'pool', name: 'Pool (at the house)', short: 'Pool', states: ['yes'], hint: 'The house has its own pool' },
     { key: 'communityPool', name: 'Community pool', short: 'Community pool', states: ['yes'], hint: 'A neighborhood, HOA or community pool' },
     { key: 'clubhouse', name: 'Clubhouse', short: 'Clubhouse', states: ['yes'] },
@@ -122,6 +123,7 @@
       ['Patio & porch', j(f.patioAndPorchFeatures)], ['Fencing', f.fencing],
       ['Exterior features', j(f.exteriorFeatures)], ['Additional structures', j(f.otherStructures)],
       ['Lot features', j(f.lotFeatures)],
+      ['Land lease', yn(f.hasLandLease)], ['Land lease amount', f.landLeaseAmount], ['Ownership', f.ownership],
       ['Water source', j(f.waterSource)], ['Has HOA', yn(f.hasAssociation)], ['HOA fee', f.associationFee],
       ['Amenities included', j(f.associationAmenities)], ['Community features', j(f.communityFeatures)],
       ['Pool features', j(f.poolFeatures)], ['Private pool', yn(f.hasPrivatePool)], ['Waterfront features', j(f.waterfrontFeatures)],
@@ -260,7 +262,32 @@
     if (cfg.baths.on) out.push(`${cfg.baths.minFull}+ full baths`);
     if (cfg.sqft.on) out.push(`${n(cfg.sqft.min)}–${n(cfg.sqft.maxNoUpstairs)} sq ft (up to ${n(cfg.sqft.maxUpstairs)} with an upstairs room)`);
     if (cfg.garage.on) out.push(`${cfg.garage.min}-car garage`);
+    if (cfg.leased.on) out.push('land not leased');
     return out;
+  }
+
+  const LEASE_RE = /\b(land|ground|lot) leases?\b|\bleased (land|lot|ground)\b|\b(land|lot|ground) (is )?leased\b|\bleasehold\b|\blot rent\b/gi;
+  const NEGATED = /\b(no|not|non|without|never)\b[^.,;]{0,15}$/i;
+  const notNegated = (text, m) => !NEGATED.test(text.slice(Math.max(0, m.index - 20), m.index));
+
+  // Whether the house sits on leased land (land lease, ground lease, lot rent, leasehold).
+  function landLease(f) {
+    let saysNo = null;
+    for (const l of (f.allFacts || '').split('\n')) {
+      const i = l.indexOf(':');
+      if (i <= 0) continue;
+      const k = l.slice(0, i), v = l.slice(i + 1).trim();
+      if (/land lease|ground lease|lot lease|lot rent/i.test(k)) {
+        if (/^(no|none|n\/a|false|\$?0(\.0+)?)\b/i.test(v)) saysNo = saysNo || l;
+        else return { value: 'yes', why: l };
+        continue;
+      }
+      if ([...v.matchAll(LEASE_RE)].some((m) => notNegated(v, m))) return { value: 'yes', why: l };
+    }
+    const d = f.description || '';
+    const hit = [...d.matchAll(LEASE_RE)].find((m) => notNegated(d, m));
+    if (hit) return { value: 'yes', why: `description: "${d.slice(Math.max(0, hit.index - 30), hit.index + hit[0].length + 30).trim()}"` };
+    return { value: 'no', why: saysNo || 'no land lease mentioned' };
   }
 
   function mustHaves(f, upstairs, cfg) {
@@ -323,14 +350,30 @@
       else if (f.parking && !/garage/i.test(f.parking) && /carport/i.test(f.parking)) add(label, 'fail', `carport, no garage (${f.parking})`);
       else add(label, 'verify', f.parking ? `garage size not listed (Parking: ${f.parking})` : 'garage not listed');
     }
+
+    if (cfg.leased.on) {
+      const lease = landLease(f);
+      if (lease.value === 'yes') add('Land lease', 'fail', `the land is leased (${lease.why})`);
+      else add('Land lease', 'pass', lease.why);
+    }
     return out;
+  }
+
+  const FEE_PERIODS = [[/^mo|^month/i, 'month'], [/^semi|^bi-?annual/i, '6 months'], [/^quarter/i, 'quarter'], [/^ann|^year|^yr/i, 'year']];
+
+  // "HOA fee: $1,200 annually" -> "$1,200/year"; "dues are $40 a month" -> "$40/month".
+  function hoaFee(text) {
+    const m = String(text || '').match(/\$\s*(\d[\d,]*(?:\.\d\d)?)\s*(?:(?:per|an?|each|every)\s+|\/\s*)?(month(?:ly)?|mo\b|semi-?annual(?:ly)?|bi-?annual(?:ly)?|quarter(?:ly)?|annual(?:ly)?|year(?:ly)?|yr\b)?/i);
+    if (!m || !(num(m[1]) > 0)) return null;
+    const period = m[2] && (FEE_PERIODS.find(([re]) => re.test(m[2])) || [])[1];
+    return '$' + m[1].replace(/\.00$/, '') + (period ? '/' + period : '');
   }
 
   function wants(f, cfg) {
     const d = f.description;
     const P = f.patio;
     const out = [];
-    const add = (key, name, state, why) => { if (cfg.wants[key].on) out.push({ key, name, state, points: state === 'unknown' ? 0 : cfg.wants[key][state], why }); };
+    const add = (key, name, state, why, extra) => { if (cfg.wants[key].on) out.push({ key, name, state, points: state === 'unknown' ? 0 : cfg.wants[key][state], why, ...extra }); };
 
     {
       const backInDesc = d.match(/screen(ed)?[- ]?(in )?(back|rear) (porch|patio|room)|(back|rear) screen(ed)?[- ]?(in )?(porch|patio|room)|screen(ed)?[- ]?(in )?(porch|patio|room|lanai)[^.]{0,60}\b(back ?yard|rear|back)\b/i);
@@ -421,11 +464,13 @@
       const has = fact(/^(has hoa|has association|association|hoa)$/i);
       const noDesc = d.match(/\bno (hoa|homeowners?'? association)\b/i);
       const dm = d.match(/[^.]{0,25}\b(hoa|homeowners?'? association)\b[^.]{0,25}/i);
-      if (fee) add('hoa', 'HOA', 'yes', fee);
+      const feeDesc = d.match(/[^.]{0,40}\b(hoa|homeowners?'? association|association|regime)\b[^.]{0,60}/i);
+      const yes = (why) => add('hoa', 'HOA', 'yes', why, { fee: hoaFee(fee) || hoaFee(feeDesc && feeDesc[0]) });
+      if (fee) yes(fee);
       else if (has && /^[^:]*:\s*(no|none)\b/i.test(has)) add('hoa', 'HOA', 'no', has);
-      else if (has && /^[^:]*:\s*yes\b/i.test(has)) add('hoa', 'HOA', 'yes', has + ' (fee not listed)');
+      else if (has && /^[^:]*:\s*yes\b/i.test(has)) yes(has);
       else if (noDesc) add('hoa', 'HOA', 'no', quote(noDesc));
-      else if (dm) add('hoa', 'HOA', 'yes', quote(dm));
+      else if (dm) yes(quote(dm));
       else add('hoa', 'HOA', 'unknown', 'HOA not listed');
     }
 
@@ -508,7 +553,11 @@
   }
 
   // Wants worth showing: the listing says something about them and they count for or against the house.
-  const statedWants = (r) => r.wants.filter((w) => w.state !== 'unknown' && w.points !== 0);
+  // An HOA is always shown with its fee, even when it is worth 0 points.
+  const statedWants = (r) => r.wants.filter((w) => w.state !== 'unknown' && (w.points !== 0 || feeText(w)));
+
+  // "$85/month" next to an HOA that has one, "fee not listed" when the listing doesn't give it.
+  const feeText = (w) => (w.key === 'hoa' && w.state === 'yes' ? w.fee || 'fee not listed' : '');
 
   function searchListingUrls(doc) {
     const urls = new Map();
@@ -521,7 +570,7 @@
     return [...urls.values()];
   }
 
-  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants };
+  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants, feeText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseScorer = api;
 })(typeof self !== 'undefined' ? self : this);
