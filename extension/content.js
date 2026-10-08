@@ -62,7 +62,7 @@
   const panel = document.createElement('div');
   panel.id = 'house-scorer-panel';
   panel.style.cssText = 'position:fixed;left:16px;bottom:16px;z-index:2147483647;background:#fff;border:2px solid #2a3f6b;border-radius:10px;padding:12px 14px;font:15px "Segoe UI",Arial,sans-serif;color:#1d2433;box-shadow:0 4px 16px rgba(0,0,0,.25);width:290px;max-height:80vh;overflow-y:auto';
-  panel.innerHTML = '<div style="font-weight:700;font-size:16px;margin-bottom:6px">House Scorer<span id="hs-min" title="Minimize" style="float:right;cursor:pointer;padding:0 4px">&#8211;</span></div><div id="hs-body"><div id="hs-status" style="margin-bottom:8px"></div><div id="hs-buttons"></div></div>';
+  panel.innerHTML = '<div style="font-weight:700;font-size:16px;margin-bottom:6px">ZillowMonster Score<span id="hs-min" title="Minimize" style="float:right;cursor:pointer;padding:0 4px">&#8211;</span></div><div id="hs-body"><div id="hs-status" style="margin-bottom:8px"></div><div id="hs-buttons"></div></div>';
   const $ = (id) => panel.querySelector('#' + id);
 
   function setStatus(html) { $('hs-status').innerHTML = html; }
@@ -111,8 +111,23 @@
   function verdictText(r, filterName) {
     const color = r.verdict === 'Match' ? '#13692a' : r.verdict === 'Check' ? '#7a5600' : '#a11';
     const notes = r.musts.filter((m) => m.status !== 'pass').map((m) => `<div style="font-size:13px;color:${m.status === 'fail' ? '#a11' : '#7a5600'}">${m.status === 'fail' ? 'No' : 'Check'}: ${escHtml(m.name)}: ${escHtml(m.detail)}</div>`).join('');
-    const wants = r.wants.map((w) => `<div style="font-size:13px">${escHtml(w.name)}: <b>${({ yes: 'Yes', partial: 'Partly', unknown: '?', no: 'No' })[w.state]}</b> (${w.points > 0 ? '+' : ''}${w.points})</div>`).join('');
-    return `${filterLine(filterName)}<div style="font-size:22px;font-weight:700">Score ${r.score} <span style="font-size:15px;color:${color}">${r.verdict}</span></div>${notes}<div style="margin-top:4px">${wants}</div>`;
+    const wants = S.statedWants(r).map((w) => `<div style="font-size:13px">${escHtml(w.name)}: <b>${({ yes: 'Yes', partial: 'Partly', no: 'No' })[w.state]}</b> (${w.points > 0 ? '+' : ''}${w.points})</div>`).join('');
+    return `${filterLine(filterName)}${houseHeader(r)}<div style="font-size:22px;font-weight:700">Score ${r.score} <span style="font-size:15px;color:${color}">${r.verdict}</span></div>${notes}<div style="margin-top:4px">${wants}</div>`;
+  }
+
+  // Price, street, size and age above the score; anything the listing doesn't give is left out.
+  function houseHeader(r) {
+    const h = S.houseInfo(r);
+    const n = (x) => Number(x).toLocaleString('en-US');
+    const size = [h.sqft != null && `${n(h.sqft)} sq ft`, h.beds != null && `${h.beds} bd`, h.baths != null && `${h.baths} ba`].filter(Boolean).join(' · ');
+    const more = [h.perSqft != null && `$${n(h.perSqft)}/sq ft`, h.yearBuilt != null && `Built ${h.yearBuilt}`].filter(Boolean).join(' · ');
+    const lines = [
+      h.price != null && `<div style="font-size:20px;font-weight:700">$${n(Math.round(h.price))}</div>`,
+      h.street && `<div style="font-weight:600">${escHtml(h.street)}</div>`,
+      size && `<div>${size}</div>`,
+      more && `<div>${more}</div>`,
+    ].filter(Boolean).join('');
+    return lines ? `<div style="border-bottom:1px solid #c5cad6;padding-bottom:6px;margin-bottom:6px">${lines}</div>` : '';
   }
 
   async function scoreListingNow() {

@@ -1,0 +1,39 @@
+body{font-family:Segoe UI,Arial,sans-serif;font-size:17px;margin:20px;color:#1d2433;background:#f6f7fb}
+h1{font-size:28px;margin:0 0 6px}
+.hint{color:#444;font-size:15px;margin:6px 0 12px}
+.row{margin:12px 0}
+select,input[type=text]{font-size:16px;padding:5px}
+button{font-size:16px;padding:6px 14px;margin-right:8px;cursor:pointer}
+button.big{font-weight:700;background:#0b5ad6;color:#fff;border:1px solid #0b5ad6;border-radius:6px;padding:8px 18px}
+#msg{font-weight:600;color:#7a5600}
+table.pick{border-collapse:collapse;background:#fff;box-shadow:0 1px 3px #0002;width:100%}
+table.pick td,table.pick th{border-bottom:1px solid #e3e6ee;padding:8px;text-align:left;vertical-align:top}
+table.pick th{background:#2a3f6b;color:#fff;font-weight:600}
+table.pick input{width:20px;height:20px}
+table.pick label{display:block;cursor:pointer}
+.toolbar{margin-bottom:16px}
+#sheet{background:#fff;padding:18px 22px;max-width:8in;box-shadow:0 1px 3px #0002}
+.sheet h1{font-size:24px;margin:0 0 4px}
+.sheet .sub{font-size:14px;color:#444;margin-bottom:10px}
+.sheet .maps{font-size:14px;margin-bottom:12px}
+.sheet .maps a{margin-right:12px}
+.stop{border:2px solid #2a3f6b;border-radius:8px;padding:10px 12px;margin:0 0 12px;break-inside:avoid;page-break-inside:avoid}
+.stop .num{float:left;width:38px;height:38px;border-radius:50%;background:#2a3f6b;color:#fff;font-weight:700;font-size:20px;text-align:center;line-height:38px;margin:0 12px 6px 0}
+.stop .addr{font-size:19px;font-weight:700}
+.stop .addr a{color:#1d2433;text-decoration:none}
+.stop .leg{font-size:13px;color:#555}
+.stop .facts{font-size:16px;margin-top:4px;clear:both}
+.stop .score{font-weight:700}
+.stop .Match{color:#13692a}.stop .Check{color:#7a5600}.stop .Rejected{color:#a11}
+.stop .wants,.stop .notes,.stop .mine{font-size:14px;margin-top:3px}
+.stop .notes{color:#7a5600}
+.stop .warn{font-size:13px;color:#a11}
+.stop .lines{margin-top:8px;font-size:13px;color:#555}
+.stop .lines div{border-bottom:1px solid #999;height:22px}
+a{color:#0b5ad6}
+@media print{
+  body{background:#fff;margin:0;font-size:15px}
+  .noprint{display:none !important}
+  #sheet{box-shadow:none;padding:0;max-width:none}
+  @page{margin:0.5in}
+}
