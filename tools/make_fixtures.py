@@ -34,7 +34,7 @@ for zpid, addr, price, bd, ba, sq, facts, desc in LISTINGS:
     town = addr.split(',')[1].strip()
     lines = [f'${price:,}', str(bd), 'beds', str(ba), 'baths', f'{sq:,}', 'sqft', addr, "What's special", desc + FILLER * 2,
              'Facts & features', 'Interior', f'Bedrooms: {bd}', f'Bathrooms: {ba}', f'Full bathrooms: {ba}',
-             f'Total interior livable area: {sq:,} sqft', *facts, 'Price per square foot: $170/sqft']
+             f'Total interior livable area: {sq:,} sqft', *facts, f'Year built: {1985 + int(zpid) % 30}', 'Price per square foot: $170/sqft']
     html = f"<html><head><title>{addr} | MLS #1 | Zillow</title></head><body>" + ''.join(f'<div>{l}</div>' for l in lines) + '</body></html>'
     open(os.path.join(ROOT, 'html', name + '.html'), 'w').write(html)
     open(os.path.join(ROOT, name + ' _ Zillow.mhtml'), 'w').write(f'Snapshot-Content-Location: https://www.zillow.com{path}\n')
