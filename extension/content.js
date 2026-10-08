@@ -111,7 +111,7 @@
   function verdictText(r, filterName) {
     const color = r.verdict === 'Match' ? '#13692a' : r.verdict === 'Check' ? '#7a5600' : '#a11';
     const notes = r.musts.filter((m) => m.status !== 'pass').map((m) => `<div style="font-size:13px;color:${m.status === 'fail' ? '#a11' : '#7a5600'}">${m.status === 'fail' ? 'No' : 'Check'}: ${escHtml(m.name)}: ${escHtml(m.detail)}</div>`).join('');
-    const wants = S.statedWants(r).map((w) => `<div style="font-size:13px">${escHtml(w.name)}: <b>${({ yes: 'Yes', partial: 'Partly', no: 'No' })[w.state]}</b> (${w.points > 0 ? '+' : ''}${w.points})</div>`).join('');
+    const wants = S.statedWants(r).map((w) => { const fee = S.feeText(w); return `<div style="font-size:13px">${escHtml(w.name)}: <b>${({ yes: 'Yes', partial: 'Partly', no: 'No' })[w.state]}</b>${fee ? `, <b>${escHtml(fee)}</b>` : ''}${w.points ? ` (${w.points > 0 ? '+' : ''}${w.points})` : ''}</div>`; }).join('');
     return `${filterLine(filterName)}${houseHeader(r)}<div style="font-size:22px;font-weight:700">Score ${r.score} <span style="font-size:15px;color:${color}">${r.verdict}</span></div>${notes}<div style="margin-top:4px">${wants}</div>`;
   }
 

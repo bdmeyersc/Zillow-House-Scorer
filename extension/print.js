@@ -124,7 +124,7 @@ function stopCard(s, i, prevLabel) {
   const r = s.r;
   const m = marks[r.zpid] || {};
   const label = { yes: '', partial: ' (partly)' };
-  const has = S.statedWants(r).filter((w) => w.state !== 'no').map((w) => esc(w.name) + label[w.state]);
+  const has = S.statedWants(r).filter((w) => w.state !== 'no').map((w) => esc(w.name) + label[w.state] + (S.feeText(w) ? ` (${esc(S.feeText(w))})` : ''));
   const missing = S.statedWants(r).filter((w) => w.state === 'no').map((w) => esc(w.name));
   const issues = r.musts.filter((x) => x.status !== 'pass').map((x) => `${x.status === 'fail' ? 'No' : 'Check'}: ${esc(x.name)}: ${esc(x.detail)}`);
   const leg = s.miles != null ? `${s.miles < 0.1 ? 'next door to' : `${s.miles.toFixed(1)} mi from`} ${prevLabel}` : '';
