@@ -50,6 +50,8 @@
   .markbadge.keep{background:#13692a}.markbadge.no{background:#a11}
   .cmttext{font-size:14px;white-space:pre-wrap;margin-top:4px}
   .old{font-size:13px;color:#a11}
+  .pc{font-size:14px;font-weight:700;color:#0b5ad6}.pc.none{font-weight:400;color:#666}
+  .scanned{font-size:13px;color:#666;margin-top:2px}
   `;
 
   function wantCell(r, key) {
@@ -70,6 +72,11 @@
     return `<td class="mine">${badge}${m.comment ? `<div class="cmttext">${esc(m.comment)}</div>` : ''}</td>`;
   }
 
+  function pcLine(r) {
+    const t = S.priceChangeText(r);
+    return t ? `<div class="pc${/^No /.test(t) ? ' none' : ''}">${esc(t)}</div>` : '';
+  }
+
   function row(r, rank, ctx) {
     const m = ctx.marks[r.zpid] || {};
     const notes = r.musts.filter((x) => x.status !== 'pass')
@@ -81,7 +88,7 @@
       <td class="score">${r.score}</td>
       <td><span class="tag ${r.verdict}">${r.verdict}</span></td>
       ${mineCell(r, m, ctx.interactive)}
-      <td class="house"><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a><div>${money(r.price)} · ${r.beds ?? '?'} bd / ${r.baths ?? '?'} ba · ${r.sqft ? r.sqft.toLocaleString() : '?'} sq ft · upstairs room: ${up}</div><div class="notes">${notes}</div>${r.legacy ? '<div class="old">Scored by the old version with the original filter. Rescan to apply your current filter.</div>' : ''}</td>
+      <td class="house"><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a><div>${money(r.price)} · ${r.beds ?? '?'} bd / ${r.baths ?? '?'} ba · ${r.sqft ? r.sqft.toLocaleString() : '?'} sq ft · upstairs room: ${up}</div>${pcLine(r)}<div class="notes">${notes}</div>${r.scoredAt ? `<div class="scanned">${esc(S.scanDateText(r))}</div>` : ''}${r.legacy ? '<div class="old">Scored by the old version with the original filter. Rescan to apply your current filter.</div>' : ''}</td>
       ${ctx.wantCols.map((w) => wantCell(r, w.key)).join('')}
     </tr>`;
   }
