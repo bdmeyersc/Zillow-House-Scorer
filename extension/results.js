@@ -23,7 +23,7 @@ async function render() {
   grp.checked = localStorage.groupByTown !== 'no';
   grp.disabled = tsel.value !== 'all';
   if (!results.length) {
-    el.innerHTML = '<h1>No houses scored yet</h1><p>Open a Zillow search and click <b>Score all houses in this search</b> in the House Scorer box at the bottom-left of the page.</p>';
+    el.innerHTML = '<h1>No houses scored yet</h1><p>Open a Zillow search and click <b>Score all houses in this search</b> in the ZillowMonster Score box at the bottom-left of the page.</p>';
     return;
   }
   const newest = Math.max(...results.map((r) => r.scoredAt || 0));
@@ -68,6 +68,7 @@ document.getElementById('town').onchange = (e) => { localStorage.townView = e.ta
 document.getElementById('group').onchange = (e) => { localStorage.groupByTown = e.target.checked ? 'yes' : 'no'; render(); };
 document.getElementById('filter').onchange = (e) => HouseFilters.setActive(e.target.value);
 document.getElementById('edit').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('filters.html') });
+document.getElementById('print').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('print.html') + '?town=' + encodeURIComponent(document.getElementById('town').value) });
 document.getElementById('refresh').onclick = render;
 document.getElementById('clear').onclick = async () => {
   if (!confirm('Remove all scored houses from the report? (Your KEEP / NO marks and notes are kept and come back if you rescan a house.)')) return;

@@ -120,5 +120,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(4000);
   console.log('listing panel:', (await lp.$eval('#hs-status', (e) => e.innerText)).replace(/\n/g, ' | '));
   await lp.screenshot({ path: ROOT + '/samples/shot_listing_panel.png' });
+
+  // Print KEEP houses: mark every house KEEP, pick all but one, make the driving list
+  if (report) {
+    await report.bringToFront();
+    await report.evaluate(async () => {
+      const { scores, marks = {} } = await chrome.storage.local.get(['scores', 'marks']);
+      for (const z of Object.keys(scores)) marks[z] = { ...(marks[z] || {}), mark: 'keep', updatedAt: Date.now() };
+      await chrome.storage.local.set({ marks });
+    });
+    await sleep(800);
+    const pp = await browser.newPage();
+    await pp.goto(report.url().replace('results.html', 'print.html?town=all'));
+    await sleep(1500);
+    console.log('print towns:', await pp.$$eval('#town option', (o) => o.map((x) => x.textContent).join(', ')), '| houses:', await pp.$$eval('#list tbody tr', (r) => r.length));
+    await pp.screenshot({ path: ROOT + '/samples/shot_print_pick.png', fullPage: true });
+    await pp.click('#list tbody tr:last-child input');
+    await pp.type('#start', '200 N Main St, Sumter, SC 29150');
+    await pp.click('#make');
+    await pp.waitForFunction(() => document.getElementById('out').style.display !== 'none', { timeout: 120000 });
+    console.log('print sheet:', await pp.$eval('.sheet h1', (e) => e.innerText), '|', await pp.$eval('.sheet .sub', (e) => e.innerText));
+    console.log('stops:', JSON.stringify(await pp.$$eval('.stop', (els) => els.map((e) => [e.querySelector('.addr').innerText, (e.querySelector('.leg') || {}).innerText || '', (e.querySelector('.warn') || {}).innerText || '']))));
+    console.log('maps links:', await pp.$$eval('.maps a', (a) => a.length));
+    await pp.screenshot({ path: ROOT + '/samples/shot_print_sheet.png', fullPage: true });
+    await pp.pdf({ path: ROOT + '/samples/print_sheet.pdf', format: 'letter' });
+  }
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });

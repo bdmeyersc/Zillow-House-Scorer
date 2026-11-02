@@ -44,6 +44,10 @@ The menu always lists Manning, Santee, Sumter, Dalzell, Conway, Longs, Loris and
 Each report row has **KEEP** / **NO** buttons and a notes box. NO moves the house to a "Manually Excluded" section at the bottom.
 Marks and notes are stored separately from scores (`marks` in `chrome.storage.local`), so they survive rescans and "Clear all results".
 
+## Printing KEEP houses
+
+The report's **Print KEEP houses** button opens `print.html` for the town picked in the Town menu. It lists that town's KEEP houses with tick boxes and an optional starting address. **Make my driving list** finds each address (Zillow's own coordinates when the page has them, otherwise the US Census geocoder, then OpenStreetMap, then the town as an approximate spot), caches the result in `geo[zpid]`, and orders the stops with nearest-neighbor plus 2-opt on straight-line distance (`route.js`). The printable sheet has one card per stop, Google Maps direction links (10 points per link), and can be printed, saved as PDF from the print dialog, or saved as a standalone HTML file.
+
 ## Backups and moving between PCs
 
 **Save backup** on the report writes `scores`, `marks`, `filterSets`, `activeFilter` and `filterTimes` to a JSON file (`HouseFilters.backupData`).
@@ -64,7 +68,7 @@ click "Load unpacked", and select the `extension` folder.
 
 - `extension/scorer.js`: parses page text and scores a listing (also runs in Node)
 - `extension/report.js`: builds the ranked report HTML
-- `extension/content.js`: the on-page House Scorer box, plus the search scan (one background tab per listing)
+- `extension/content.js`: the on-page ZillowMonster Score box (house facts header, then score; unstated or 0-point wants are hidden), plus the search scan (one background tab per listing)
 - `extension/background.js`: opens and closes the scan tabs and opens the report
 - `extension/results.html` / `results.js`: the report page, with KEEP / NO and notes
 - `extension/filters.html` / `filters.js`: the filter editor

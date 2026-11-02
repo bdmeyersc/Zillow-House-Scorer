@@ -12,7 +12,7 @@ HOUSE SCORER FOR ZILLOW - how to install (one time, about 2 minutes)
 
 HOW TO USE
 - Go to zillow.com and run your search as usual (town, price, 3 bd, 2+ ba).
-- A "House Scorer" box appears at the bottom-left of the page.
+- A "ZillowMonster Score" box appears at the bottom-left of the page.
 - Click "Score all houses in this search". It opens each listing in a
   background tab for a few seconds, one after another, then closes it.
   Expect about 10 seconds per house. You can keep using other programs.
@@ -43,6 +43,27 @@ KEEP / NO AND NOTES
 - Each house in the report has KEEP and NO buttons and a notes box.
 - NO moves the house to "Manually Excluded" at the bottom. Click NO again
   to undo it. Notes save as you type.
+
+THE BOX ON A LISTING
+- The top shows the price, street, sq ft, bedrooms, baths, price per
+  sq ft and year built. Then the score and Match / Check / Rejected.
+- Only features the listing actually mentions are shown. Lines the
+  listing says nothing about, or that are worth 0 points, are hidden.
+
+PRINTING KEEP HOUSES FOR A DRIVE
+1. On the report page, pick the town in the "Town" menu (or All towns)
+   and click "Print KEEP houses". A new tab opens.
+2. It lists every house you marked KEEP in that town. Untick any you
+   don't want to visit this time.
+3. Optional: type where you'll start driving from (for example your
+   home address). It's remembered for next time.
+4. Click "Make my driving list". It looks each address up on a map
+   (US Census and OpenStreetMap, free) and puts the houses in the order
+   that keeps the drive shortest.
+5. Click "Print or save as PDF". To get a PDF, set Destination to
+   "Save as PDF" and click Save. "Save as HTML file" saves a copy you
+   can open on your phone. The page also has Google Maps direction links
+   for the whole route.
 
 USING MORE THAN ONE PC (BACKUPS)
 - On the report page, click "Save backup" and save the file in your

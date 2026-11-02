@@ -1,0 +1,38 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Print KEEP houses</title>
+  <link rel="stylesheet" href="print.css">
+</head>
+<body>
+  <div id="pick" class="noprint">
+    <h1>Print KEEP houses</h1>
+    <p class="hint">1. Pick the town. 2. Untick any house you don't want to visit. 3. Optionally type where you'll start driving from. 4. Click <b>Make my driving list</b>.</p>
+    <div class="row">
+      <label>Town: <select id="town"></select></label>
+      <button id="all" type="button">Tick all</button>
+      <button id="none" type="button">Untick all</button>
+    </div>
+    <div id="list"></div>
+    <div class="row">
+      <label>Start driving from (optional): <input id="start" type="text" size="44" placeholder="e.g. 123 Main St, Manning, SC 29102"></label>
+    </div>
+    <div class="row"><button id="make" class="big" type="button">Make my driving list</button> <span id="msg"></span></div>
+  </div>
+  <div id="out" style="display:none">
+    <div class="toolbar noprint">
+      <button id="doPrint" class="big" type="button">Print or save as PDF</button>
+      <button id="saveHtml" type="button">Save as HTML file</button>
+      <button id="back" type="button">Back to the pick list</button>
+      <div class="hint">To get a PDF: click <b>Print or save as PDF</b>, then set <b>Destination</b> to <b>Save as PDF</b> and click <b>Save</b>.</div>
+    </div>
+    <div id="sheet"></div>
+  </div>
+  <script src="scorer.js"></script>
+  <script src="filters-store.js"></script>
+  <script src="report.js"></script>
+  <script src="route.js"></script>
+  <script src="print.js"></script>
+</body>
+</html>

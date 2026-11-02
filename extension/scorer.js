@@ -125,11 +125,14 @@
       ['Water source', j(f.waterSource)], ['Has HOA', yn(f.hasAssociation)], ['HOA fee', f.associationFee],
       ['Amenities included', j(f.associationAmenities)], ['Community features', j(f.communityFeatures)],
       ['Pool features', j(f.poolFeatures)], ['Private pool', yn(f.hasPrivatePool)], ['Waterfront features', j(f.waterfrontFeatures)],
+      ['Year built', f.yearBuilt ?? p.yearBuilt],
     ];
+    const coord = (v) => (typeof v === 'number' && Number.isFinite(v) && v !== 0 ? v : null);
     return {
       lines: pairs.filter(([, v]) => v != null && v !== '').map(([k, v]) => `${k}: ${v}`),
       description: p.description || '',
       price: typeof p.price === 'number' ? p.price : null,
+      lat: coord(p.latitude), lng: coord(p.longitude),
     };
   }
 
@@ -208,10 +211,13 @@
     const threeQBaths = num(get('3/4 bathrooms')) || 0;
 
     const zpid = ((meta.url || '').match(/(\d+)_zpid/) || [])[1] || address;
+    const builtLine = head.find((l) => /^Built in \d{4}$/i.test(l));
+    const yearBuilt = num(get('year built')) ?? (builtLine ? num(builtLine) : null);
 
     return {
       zpid, address, url: meta.url || '', price, beds, bathsTotal, fullBaths, halfBaths, threeQBaths, sqft,
-      description,
+      description, yearBuilt,
+      lat: extras ? extras.lat : null, lng: extras ? extras.lng : null,
       levels: get('levels'), stories: get('stories'),
       roomLevels: get('level'),
       garageSpaces: get('garage spaces'),
@@ -488,6 +494,22 @@
     return { ...saved, ...r, zpid: saved.zpid, address, town: townOf(address), url: saved.url || r.url };
   }
 
+  // Header facts for the panel and the printed list. Works on houses saved before year built was read.
+  function houseInfo(r) {
+    const f = r.facts || {};
+    const all = f.allFacts || '';
+    const yearBuilt = f.yearBuilt ?? num((all.match(/^Year built:\s*(\d{4})/im) || [])[1]);
+    const listed = num((all.match(/^Price per square foot:\s*\$\s*([\d,]+)/im) || [])[1]);
+    const perSqft = listed ?? (r.price && r.sqft ? Math.round(r.price / r.sqft) : null);
+    return {
+      street: String(r.address || '').split(',')[0].trim(), price: r.price ?? null, sqft: r.sqft ?? null,
+      beds: r.beds ?? null, baths: r.baths ?? null, perSqft, yearBuilt: yearBuilt ?? null, lat: f.lat ?? null, lng: f.lng ?? null,
+    };
+  }
+
+  // Wants worth showing: the listing says something about them and they count for or against the house.
+  const statedWants = (r) => r.wants.filter((w) => w.state !== 'unknown' && w.points !== 0);
+
   function searchListingUrls(doc) {
     const urls = new Map();
     const add = (href) => {
@@ -499,7 +521,7 @@
     return [...urls.values()];
   }
 
-  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras };
+  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseScorer = api;
 })(typeof self !== 'undefined' ? self : this);
