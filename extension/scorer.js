@@ -135,6 +135,9 @@
       description: p.description || '',
       price: typeof p.price === 'number' ? p.price : null,
       lat: coord(p.latitude), lng: coord(p.longitude),
+      priceHistory: Array.isArray(p.priceHistory) && p.priceHistory.length
+        ? p.priceHistory.filter((h) => h && /^\d{4}-\d{2}-\d{2}/.test(h.date || '')).map((h) => ({ date: h.date.slice(0, 10), event: h.event || '', price: typeof h.price === 'number' ? h.price : null }))
+        : null,
     };
   }
 
@@ -143,6 +146,29 @@
     const m = String(s).replace(/,/g, '').match(/-?\d+(\.\d+)?/);
     return m ? parseFloat(m[0]) : null;
   };
+
+  const US_DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
+
+  // Zillow's "Price history" table as [{ date: 'YYYY-MM-DD', event, price }]; null when the page has none.
+  function priceHistory(lines, extras) {
+    if (extras && extras.priceHistory && extras.priceHistory.length) return extras.priceHistory;
+    const start = lines.lastIndexOf('Price history');
+    if (start < 0) return null;
+    const out = [];
+    const end = Math.min(lines.length, start + 300);
+    for (let i = start + 1; i < end; i++) {
+      if (/^(Public tax history|Tax history|Neighborhood:|Nearby schools|Monthly payment)/i.test(lines[i])) break;
+      const d = lines[i].match(US_DATE);
+      if (!d) continue;
+      let event = '', price = null;
+      for (let j = i + 1; j < Math.min(end, i + 6) && !US_DATE.test(lines[j]); j++) {
+        const pm = lines[j].match(/^\$\s?([\d,]+)/);
+        if (pm) { if (price == null) price = num(pm[1]); } else if (!event && /^[A-Za-z]/.test(lines[j])) event = lines[j];
+      }
+      out.push({ date: `${d[3]}-${d[1].padStart(2, '0')}-${d[2].padStart(2, '0')}`, event, price });
+    }
+    return out.length ? out : null;
+  }
 
   function parseListing(rawLines, meta = {}, extras = null) {
     const L = [];
@@ -215,10 +241,13 @@
     const zpid = ((meta.url || '').match(/(\d+)_zpid/) || [])[1] || address;
     const builtLine = head.find((l) => /^Built in \d{4}$/i.test(l));
     const yearBuilt = num(get('year built')) ?? (builtLine ? num(builtLine) : null);
+    const cut = head.map((l) => l.match(/^Price cut:\s*\$([\d,]+)\s*\((\d{1,2})\/(\d{1,2})\)/i)).find(Boolean);
 
     return {
       zpid, address, url: meta.url || '', price, beds, bathsTotal, fullBaths, halfBaths, threeQBaths, sqft,
       description, yearBuilt,
+      priceHistory: priceHistory(rawLines, extras),
+      priceCut: cut ? { amount: num(cut[1]), month: +cut[2], day: +cut[3] } : null,
       lat: extras ? extras.lat : null, lng: extras ? extras.lng : null,
       levels: get('levels'), stories: get('stories'),
       roomLevels: get('level'),
@@ -559,6 +588,51 @@
   // "$85/month" next to an HOA that has one, "fee not listed" when the listing doesn't give it.
   const feeText = (w) => (w.key === 'hoa' && w.state === 'yes' ? w.fee || 'fee not listed' : '');
 
+  const DAY = 864e5;
+  const ymd = (t) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+  // Latest price change in the 14 days before `now`: { recent: true, date, price, from } or { recent: false }.
+  // null when the scan didn't read a price history (houses scanned before v1.5, or a page without one).
+  function priceChange(r, now = Date.now()) {
+    const f = r.facts || {};
+    const since = ymd(now - 14 * DAY);
+    if (f.priceHistory) {
+      const hist = f.priceHistory.slice().sort((a, b) => b.date.localeCompare(a.date));
+      const i = hist.findIndex((h) => /price change/i.test(h.event) && h.date >= since);
+      if (i < 0) return { recent: false };
+      const prev = hist.slice(i + 1).find((h) => h.price != null && /listed|price change/i.test(h.event));
+      return { recent: true, date: hist[i].date, price: hist[i].price ?? null, from: prev ? prev.price : null };
+    }
+    if (f.priceCut) {
+      const seen = new Date(r.scoredAt || now);
+      let y = seen.getFullYear();
+      if (new Date(y, f.priceCut.month - 1, f.priceCut.day) > seen) y--;
+      const date = `${y}-${String(f.priceCut.month).padStart(2, '0')}-${String(f.priceCut.day).padStart(2, '0')}`;
+      if (date < since) return { recent: false };
+      const price = r.price ?? null;
+      return { recent: true, date, price, from: price != null && f.priceCut.amount ? price + f.priceCut.amount : null };
+    }
+    return null;
+  }
+
+  const shortDate = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); };
+  const usd = (n) => '$' + Math.round(n).toLocaleString('en-US');
+
+  // "Price cut Oct 28: $310,000 → $299,000 (−$11,000)"; '' when the price history wasn't read.
+  function priceChangeText(r, now) {
+    const pc = priceChange(r, now);
+    if (!pc) return '';
+    if (!pc.recent) return 'No price change in the last 2 weeks';
+    if (pc.price != null && pc.from != null && pc.price !== pc.from) {
+      const diff = pc.price - pc.from;
+      return `Price ${diff < 0 ? 'cut' : 'raised'} ${shortDate(pc.date)}: ${usd(pc.from)} → ${usd(pc.price)} (${diff < 0 ? '−' : '+'}${usd(Math.abs(diff))})`;
+    }
+    return `Price changed ${shortDate(pc.date)}${pc.price != null ? ` to ${usd(pc.price)}` : ''}`;
+  }
+
+  // "Scanned Nov 2, 2026" from when the house was last read.
+  const scanDateText = (r) => (r.scoredAt ? 'Scanned ' + new Date(r.scoredAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
+
   function searchListingUrls(doc) {
     const urls = new Map();
     const add = (href) => {
@@ -570,7 +644,7 @@
     return [...urls.values()];
   }
 
-  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants, feeText };
+  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants, feeText, priceChange, priceChangeText, scanDateText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseScorer = api;
 })(typeof self !== 'undefined' ? self : this);

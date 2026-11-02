@@ -118,14 +118,18 @@
   // Price, street, size and age above the score; anything the listing doesn't give is left out.
   function houseHeader(r) {
     const h = S.houseInfo(r);
+    const pc = S.priceChangeText(r);
+    const scanned = S.scanDateText(r);
     const n = (x) => Number(x).toLocaleString('en-US');
     const size = [h.sqft != null && `${n(h.sqft)} sq ft`, h.beds != null && `${h.beds} bd`, h.baths != null && `${h.baths} ba`].filter(Boolean).join(' · ');
     const more = [h.perSqft != null && `$${n(h.perSqft)}/sq ft`, h.yearBuilt != null && `Built ${h.yearBuilt}`].filter(Boolean).join(' · ');
     const lines = [
       h.price != null && `<div style="font-size:20px;font-weight:700">$${n(Math.round(h.price))}</div>`,
+      pc && `<div style="font-size:13px;font-weight:600;color:${/^No /.test(pc) ? '#555' : '#0b5ad6'}">${escHtml(pc)}</div>`,
       h.street && `<div style="font-weight:600">${escHtml(h.street)}</div>`,
       size && `<div>${size}</div>`,
       more && `<div>${more}</div>`,
+      scanned && `<div style="font-size:13px;color:#555">${escHtml(scanned)}</div>`,
     ].filter(Boolean).join('');
     return lines ? `<div style="border-bottom:1px solid #c5cad6;padding-bottom:6px;margin-bottom:6px">${lines}</div>` : '';
   }

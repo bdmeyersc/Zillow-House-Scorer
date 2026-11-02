@@ -32,6 +32,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await report.bringToFront();
     await sleep(1500);
     await report.screenshot({ path: ROOT + '/samples/shot_report.png', fullPage: true });
+    console.log('price changes:', JSON.stringify(await report.$$eval('#report td.house', (tds) => tds.map((td) => [td.querySelector('a').innerText.split(',')[0], (td.querySelector('.pc') || {}).innerText || '', (td.querySelector('.scanned') || {}).innerText || '']))));
     console.log('report h1:', await report.$eval('h1', (e) => e.innerText));
     console.log('HOA cells:', JSON.stringify(await report.evaluate(() => {
       const t = document.querySelector('#report table');
@@ -126,7 +127,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(4000);
   console.log('listing panel:', (await lp.$eval('#hs-status', (e) => e.innerText)).replace(/\n/g, ' | '));
   await lp.screenshot({ path: ROOT + '/samples/shot_listing_panel.png' });
-  for (const [name, path] of [['hoa', '45-Marsh-Hen-Dr-Little-River-SC-29566/200000001_zpid/'], ['leased', '15-Gull-Ct-Little-River-SC-29566/200000006_zpid/']]) {
+  for (const [name, path] of [['hoa', '45-Marsh-Hen-Dr-Little-River-SC-29566/200000001_zpid/'], ['leased', '15-Gull-Ct-Little-River-SC-29566/200000006_zpid/'], ['oldcut', '812-Elm-St-Conway-SC-29526/200000002_zpid/']]) {
     await lp.goto('https://www.zillow.com/homedetails/' + path, { waitUntil: 'domcontentloaded' });
     await sleep(4000);
     console.log(`listing panel (${name}):`, (await lp.$eval('#hs-status', (e) => e.innerText)).replace(/\n/g, ' | '));

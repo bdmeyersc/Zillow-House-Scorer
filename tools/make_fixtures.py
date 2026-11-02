@@ -1,5 +1,5 @@
 """Writes synthetic Zillow-like listing pages to samples/ so run.js, mock_server.py and e2e.js work without real saved pages."""
-import os, subprocess
+import os, subprocess, datetime
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'samples')
 os.makedirs(os.path.join(ROOT, 'html'), exist_ok=True)
 
@@ -35,6 +35,18 @@ LISTINGS = [
      'Move-in ready with a big backyard.'),
 ]
 
+def ago(days):
+    d = datetime.date.today() - datetime.timedelta(days=days)
+    return f'{d.month}/{d.day}/{d.year}'
+
+# Price history tables (dates relative to today) and Zillow's "Price cut" header line.
+HISTORY = {
+    '116199395': [(5, 'Price change', '$310,000-4.6%'), (40, 'Listed for sale', '$325,000')],
+    '200000002': [(30, 'Price change', '$299,000-3.5%'), (60, 'Listed for sale', '$310,000'), (2400, 'Sold', '$180,000')],
+    '200000004': [(45, 'Listed for sale', '$320,000')],
+}
+PRICE_CUT = {'200000001': (6000, 3)}
+
 for zpid, addr, price, bd, ba, sq, facts, desc in LISTINGS:
     name = addr.split(',')[0].replace(' ', '-')
     path = f"/homedetails/{addr.replace(', ', '-').replace(' ', '-')}/{zpid}_zpid/"
@@ -42,6 +54,14 @@ for zpid, addr, price, bd, ba, sq, facts, desc in LISTINGS:
     lines = [f'${price:,}', str(bd), 'beds', str(ba), 'baths', f'{sq:,}', 'sqft', addr, "What's special", desc + FILLER * 2,
              'Facts & features', 'Interior', f'Bedrooms: {bd}', f'Bathrooms: {ba}', f'Full bathrooms: {ba}',
              f'Total interior livable area: {sq:,} sqft', *facts, f'Year built: {1985 + int(zpid) % 30}', 'Price per square foot: $170/sqft']
+    if zpid in PRICE_CUT:
+        amt, days = PRICE_CUT[zpid]
+        lines.insert(1, f'Price cut: ${amt:,} ({ago(days).rsplit("/", 1)[0]})')
+    if zpid in HISTORY:
+        lines += ['Price history', 'Date', 'Event', 'Price']
+        for days, event, p in HISTORY[zpid]:
+            lines += [ago(days), event, p]
+        lines += ['Public tax history']
     html = f"<html><head><title>{addr} | MLS #1 | Zillow</title></head><body>" + ''.join(f'<div>{l}</div>' for l in lines) + '</body></html>'
     open(os.path.join(ROOT, 'html', name + '.html'), 'w').write(html)
     open(os.path.join(ROOT, name + ' _ Zillow.mhtml'), 'w').write(f'Snapshot-Content-Location: https://www.zillow.com{path}\n')
