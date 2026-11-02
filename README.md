@@ -11,6 +11,7 @@ It runs in your own logged-in Chrome browser, because Zillow blocks automated ac
 - Exactly 3 bedrooms, at least 2 full bathrooms (3/2.5 is OK, 4/2 is not)
 - 1,600–2,000 sq ft, or up to 2,350 sq ft if there is an upstairs room
 - Garage for at least 2 cars
+- Land not leased: a listing that mentions a land lease, ground lease, lot rent or leasehold is ruled out
 
 **Wants (scored, max 145).** "?" means the listing doesn't say and scores 0.
 
@@ -24,7 +25,7 @@ It runs in your own logged-in Chrome browser, because Zillow blocks automated ac
 | Well (water or irrigation) | +5 | – | 0 | 0 (city water) |
 | Dock | +10 | +5 (shared dock) | 0 | – |
 | Boat slip | +10 | – | 0 | – |
-| HOA | 0 (fee shown) | – | 0 | 0 (no HOA) |
+| HOA | 0 (fee shown next to it, e.g. $85/month) | – | 0 | 0 (no HOA) |
 | Pool at the house | +10 | – | 0 | – |
 | Community pool | +5 | – | 0 | – |
 | Clubhouse | +5 | – | 0 | – |

@@ -8,6 +8,7 @@ const MUSTS = [
   { key: 'baths', label: 'Full bathrooms', parts: ['at least', ['minFull', 1], '(half baths don\'t count, so 3/2.5 passes at 2)'] },
   { key: 'sqft', label: 'Square feet', parts: ['at least', ['min', 50], '; at most', ['maxNoUpstairs', 50], 'with no upstairs room, or', ['maxUpstairs', 50], 'with one'] },
   { key: 'garage', label: 'Garage', parts: ['at least', ['min', 1], 'cars'] },
+  { key: 'leased', label: 'Land not leased', parts: ['Reject any house on leased land (land lease, ground lease, lot rent or leasehold)'] },
 ];
 const STATE_LABEL = { yes: 'Has it', partial: 'Partly', no: 'Clearly missing' };
 

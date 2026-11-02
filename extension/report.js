@@ -34,6 +34,7 @@
   .tag{display:inline-block;padding:3px 10px;border-radius:12px;font-weight:700;font-size:15px}
   .Match{background:#d8f5dd;color:#13692a}.Check{background:#fff1c9;color:#7a5600}.Rejected{background:#fde0e0;color:#a11}
   .st{font-weight:700} .yes{color:#13692a}.partial{color:#9a6a00}.unknown{color:#777}.no{color:#c02020}
+  .fee{display:block;font-weight:700}
   .why{display:block;font-size:13px;color:#666;max-width:220px}
   .notes{font-size:14px;color:#7a5600}.fail{color:#a11}
   .legend{font-size:15px;color:#444;margin:10px 0 18px}
@@ -55,7 +56,8 @@
     const w = r.wants.find((x) => x.key === key);
     if (!w) return '<td></td>';
     const pts = w.points > 0 ? `+${w.points}` : `${w.points}`;
-    return `<td><span class="st ${w.state}">${STATE_LABEL[w.state]} (${pts})</span><span class="why">${esc(w.why)}</span></td>`;
+    const fee = S.feeText(w);
+    return `<td><span class="st ${w.state}">${STATE_LABEL[w.state]} (${pts})</span>${fee ? `<span class="fee">${esc(fee)}</span>` : ''}<span class="why">${esc(w.why)}</span></td>`;
   }
 
   function mineCell(r, m, interactive) {
