@@ -37,7 +37,7 @@
 
   const isFilterChange = (ch) => !!(ch.filterSets || ch.activeFilter);
 
-  const BACKUP_KEYS = ['scores', 'marks', 'filterSets', 'activeFilter', 'filterTimes'];
+  const BACKUP_KEYS = ['scores', 'marks', 'filterSets', 'activeFilter', 'filterTimes', 'searches', 'seenIn'];
 
   async function backupData() {
     return { app: 'house-scorer', version: 1, savedAt: Date.now(), data: await chrome.storage.local.get(BACKUP_KEYS) };
@@ -69,7 +69,22 @@
         times[n] = bt;
       }
     }
-    const out = { scores, marks, filterTimes: times };
+    const plain = (k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype';
+    const seenIn = cur.seenIn || {};
+    for (const [z, keys] of Object.entries(b.seenIn || {})) {
+      if (!plain(z)) continue;
+      const mine = seenIn[z] = Object.hasOwn(seenIn, z) ? seenIn[z] : {};
+      for (const [k, at] of Object.entries(keys || {})) if (plain(k) && typeof at === 'number' && !(mine[k] >= at)) mine[k] = at;
+    }
+    const searches = cur.searches || {};
+    for (const [k, srch] of Object.entries(b.searches || {})) {
+      if (!plain(k) || !srch || typeof srch !== 'object') continue;
+      const mine = Object.hasOwn(searches, k) ? searches[k] : null;
+      if (!mine) { searches[k] = srch; continue; }
+      if ((srch.run && srch.run.at) > (mine.run ? mine.run.at : 0)) { mine.run = srch.run; mine.label = srch.label || mine.label; }
+      if ((srch.fullAt || 0) > (mine.fullAt || 0)) mine.fullAt = srch.fullAt;
+    }
+    const out = { scores, marks, filterTimes: times, seenIn, searches };
     if (Object.keys(sets).length) {
       out.filterSets = sets;
       if (!curSets && b.activeFilter && sets[b.activeFilter]) out.activeFilter = b.activeFilter;

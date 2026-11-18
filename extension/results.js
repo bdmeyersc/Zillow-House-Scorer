@@ -9,7 +9,7 @@ let lastMarkSig = '';
 const drafts = {}; // zpid -> note text typed but not saved yet
 
 async function render() {
-  const [{ scores = {}, marks = {} }, filters] = await Promise.all([chrome.storage.local.get(['scores', 'marks']), HouseFilters.load()]);
+  const [{ scores = {}, marks = {}, searches = {}, seenIn = {} }, filters] = await Promise.all([chrome.storage.local.get(['scores', 'marks', 'searches', 'seenIn']), HouseFilters.load()]);
   const sel = document.getElementById('filter');
   sel.innerHTML = Object.keys(filters.sets).map((n) => `<option>${esc(n)}</option>`).join('');
   sel.value = filters.active;
@@ -32,7 +32,7 @@ async function render() {
   const act = document.activeElement;
   const focus = act && act.matches('textarea.cmt') ? { zpid: act.closest('[data-zpid]').dataset.zpid, a: act.selectionStart, b: act.selectionEnd } : null;
   el.innerHTML = HouseReport.renderBody(results, 'last updated ' + new Date(newest).toLocaleString(),
-    { cfg: filters.cfg, marks, interactive: true, filterName: filters.active, town: tsel.value, groupByTown: grp.checked });
+    { cfg: filters.cfg, marks, searches, seenIn, interactive: true, filterName: filters.active, town: tsel.value, groupByTown: grp.checked });
   el.querySelectorAll('[data-zpid]').forEach((cell) => {
     const ta = cell.querySelector('textarea.cmt');
     ta.dataset.saved = (marks[cell.dataset.zpid] || {}).comment || '';
@@ -157,7 +157,7 @@ document.getElementById('restoreFile').onchange = async (e) => {
 chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local') return;
   // Saving a note doesn't re-render, so the page doesn't jump.
-  if (ch.scores || HouseFilters.isFilterChange(ch) || (ch.marks && markSig(ch.marks.newValue) !== lastMarkSig)) render();
+  if (ch.scores || ch.searches || HouseFilters.isFilterChange(ch) || (ch.marks && markSig(ch.marks.newValue) !== lastMarkSig)) render();
   else if (ch.marks) syncNotes(ch.marks.newValue);
 });
 render();

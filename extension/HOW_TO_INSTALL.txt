@@ -88,3 +88,16 @@ UPDATING TO A NEW VERSION
 
 Each house is re-read once a day, so new listings and price changes show up.
 "Clear all results" on the report page starts fresh.
+
+KEEPING THE REPORT UP TO DATE
+- The report doesn't update by itself. It changes when you open a Zillow
+  search and click "Score all houses in this search". Rescan your
+  searches every few days, and do every page of a search (click "Next
+  page" and scan again) so the extension knows it has seen the whole search.
+- When a house is pending, under contract, sold or off market, it moves to
+  "No longer for sale" at the bottom of the report and is left out of the
+  driving list. Your KEEP / NO mark and note stay with it.
+- When a house you scanned before is missing from a full rescan of the same
+  search, the extension re-reads it to check its status. If Zillow still
+  lists it for sale, the report says "Not in your latest ... search"; it
+  may no longer match your Zillow filters (for example a new price).
