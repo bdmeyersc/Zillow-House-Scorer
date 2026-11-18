@@ -42,7 +42,9 @@ TOWNS
 KEEP / NO AND NOTES
 - Each house in the report has KEEP and NO buttons and a notes box.
 - NO moves the house to "Manually Excluded" at the bottom. Click NO again
-  to undo it. Notes save as you type.
+  to undo it. Type a note, then click "Save note" under it. Until you
+  click it the note shows "Not saved yet", and Chrome warns you if you
+  try to close the report with a note that isn't saved.
 
 THE BOX ON A LISTING
 - The top shows the price, street, sq ft, bedrooms, baths, price per
