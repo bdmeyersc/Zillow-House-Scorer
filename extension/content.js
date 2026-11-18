@@ -186,12 +186,14 @@
     const pm = location.pathname.match(/\/(\d+)_p\/?$/);
     const path = location.pathname.replace(/\d+_p\/?$/, '').replace(/\/?$/, '/');
     const region = (q.regionSelection || []).map((x) => x && x.regionId).filter(Boolean).sort().join(',') || q.usersSearchTerm || '';
+    const fs = q.filterState && typeof q.filterState === 'object' ? q.filterState : {};
+    const filters = JSON.stringify(Object.keys(fs).sort().map((k) => [k, fs[k]]));
     if (!region && /^\/homes\//.test(path)) return null;
     const fromPath = path.split('/').filter(Boolean)[0] || '';
     const label = q.usersSearchTerm || (document.title.match(/^(.+?) Real Estate\b/) || [])[1]
       || fromPath.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/ (\w\w)$/i, (m) => m.toUpperCase());
     const page = (q.pagination && q.pagination.currentPage) || (pm ? +pm[1] : 1);
-    return { key: path + (region ? '|' + region : ''), label, page };
+    return { key: path + (region ? '|' + region : '') + (filters !== '[]' ? '|' + filters : ''), label, page };
   }
 
   const nextPageLink = () => document.querySelector('a[title="Next page"]:not([aria-disabled="true"]), a[rel="next"]');
