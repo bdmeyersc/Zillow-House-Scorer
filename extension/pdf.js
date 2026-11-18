@@ -58,12 +58,12 @@
     link: { size: 8, bold: false, before: 0, after: 1 },
   };
 
-  // items: [{ text, kind }] (kinds in STYLE). Returns the PDF file as a Uint8Array.
+  // items: [{ text, kind, url? }] (kinds in STYLE); an item with a url is a clickable link. Returns the PDF file as a Uint8Array.
   function make(items, { title = '' } = {}) {
     const PW = 612, PH = 792, M = 54;
     const pages = [];
-    let ops = [], y = PH - M;
-    const newPage = () => { pages.push(ops); ops = []; y = PH - M; };
+    let ops = [], links = [], y = PH - M;
+    const newPage = () => { pages.push({ ops, links }); ops = []; links = []; y = PH - M; };
     for (const it of items) {
       const st = STYLE[it.kind] || STYLE.line;
       const x = M + (st.indent || 0);
@@ -75,10 +75,11 @@
         if (y - lead < M) newPage();
         y -= lead;
         ops.push(`BT /${st.bold ? 'F2' : 'F1'} ${st.size} Tf ${x} ${y.toFixed(2)} Td ${pdfString(ln)} Tj ET`);
+        if (it.url) links.push({ url: winAnsi(it.url), rect: [x, y - st.size * 0.25, x + width(ln, st.size, st.bold), y + st.size * 0.9].map((v) => v.toFixed(2)) });
       }
       y -= st.after;
     }
-    pages.push(ops);
+    pages.push({ ops, links });
 
     const objs = [];
     const add = (body) => { objs.push(body); return objs.length; };
@@ -87,9 +88,11 @@
     const f1 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>');
     const f2 = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>');
     const kids = pages.map((p) => {
-      const stream = p.join('\n');
+      const stream = p.ops.join('\n');
       const content = add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-      return add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${content} 0 R >>`);
+      const annots = p.links.map((l) => add(`<< /Type /Annot /Subtype /Link /Rect [${l.rect.join(' ')}] /Border [0 0 0] /A << /S /URI /URI ${pdfString(l.url)} >> >>`));
+      const annotRef = annots.length ? ` /Annots [${annots.map((a) => a + ' 0 R').join(' ')}]` : '';
+      return add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /Font << /F1 ${f1} 0 R /F2 ${f2} 0 R >> >> /Contents ${content} 0 R${annotRef} >>`);
     });
     objs[1] = `<< /Type /Pages /Kids [${kids.map((k) => k + ' 0 R').join(' ')}] /Count ${kids.length} >>`;
     const info = add(`<< /Title ${pdfString(winAnsi(title))} /Producer (House Scorer for Zillow) >>`);

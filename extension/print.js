@@ -45,18 +45,8 @@ function renderList() {
 
 // ---- the printed list ----
 function mapsLinks(start, stops) {
-  const pts = (start ? [{ label: 'start', address: start.address }] : []).concat(stops.map((s, i) => ({ label: String(i + 1), address: s.r.address })));
-  if (pts.length < 2) return '';
-  const enc = (a) => encodeURIComponent(a);
-  const links = [];
-  for (let i = 0; i < pts.length - 1; i += 9) {
-    const part = pts.slice(i, i + 10);
-    const url = `https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${enc(part[0].address)}&destination=${enc(part[part.length - 1].address)}` +
-      (part.length > 2 ? '&waypoints=' + part.slice(1, -1).map((p) => enc(p.address)).join('%7C') : '');
-    const from = part[0].label === 'start' ? 'Start' : 'Stop ' + part[0].label;
-    links.push(`<a href="${esc(url)}" target="_blank">${from} to stop ${part[part.length - 1].label}</a>`);
-  }
-  return `<div class="maps">Directions in Google Maps: ${links.join('')}</div>`;
+  const links = K.mapsUrls(start, stops).map((m) => `<a href="${esc(m.url)}" target="_blank">${esc(m.label)}</a>`);
+  return links.length ? `<div class="maps">Directions in Google Maps: ${links.join('')}</div>` : '';
 }
 
 function stopCard(s, i, prevLabel) {
@@ -68,7 +58,7 @@ function stopCard(s, i, prevLabel) {
   const warn = K.mapWarning(s);
   return `<div class="stop"><div class="num">${i + 1}</div>
     <div class="addr"><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a></div>
-    ${leg ? `<div class="leg">${leg} (straight line)</div>` : ''}
+    ${leg ? `<div class="leg">${leg}</div>` : ''}
     ${warn ? `<div class="warn">${esc(warn)}</div>` : ''}
     <div class="facts">${esc(sizeText(S.houseInfo(r)))}</div>
     <div class="facts"><span class="score ${esc(r.verdict)}">Score ${r.score} ${esc(r.verdict)}</span></div>
@@ -90,14 +80,16 @@ async function make() {
   say('Finding your starting point…');
   const start = await K.locateStart(startText);
   const found = await K.locateAll(rs, say);
-  const { stops: order, total } = K.order(rs, found, start);
+  say('Working out the shortest drive by road…');
+  const route = await K.routeByRoad(rs, found, start);
+  const order = route.stops;
   const town = $('town').value === 'all' ? 'All towns' : $('town').value;
   const today = new Date();
   document.title = `KEEP houses - ${town} - ${today.toISOString().slice(0, 10)}`;
   const startNote = esc(K.startNote(startText, start));
   $('sheet').innerHTML = `<div class="sheet"><h1>KEEP houses: ${esc(town)} (${order.length} ${order.length === 1 ? 'house' : 'houses'})</h1>
-    <div class="sub">${startNote}. About ${total.toFixed(1)} miles in straight lines between stops (the roads will be longer). Made ${esc(today.toLocaleDateString())} · filter: ${esc(filterName)}</div>
-    ${mapsLinks(start, order.filter((s) => s.loc))}
+    <div class="sub">${startNote}. ${esc(K.distanceText(route))} Made ${esc(today.toLocaleDateString())} · filter: ${esc(filterName)}</div>
+    ${mapsLinks(start, order)}
     ${order.map((s, i) => stopCard(s, i, i ? `stop ${i}` : 'the start')).join('')}</div>`;
   say('');
   $('make').disabled = false;
