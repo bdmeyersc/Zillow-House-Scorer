@@ -4,8 +4,9 @@ document.head.appendChild(style);
 
 const el = document.getElementById('report');
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-const markSig = (marks) => JSON.stringify(Object.entries(marks || {}).map(([z, m]) => [z, m.mark || '']).sort());
+const markSig = (marks) => JSON.stringify(Object.entries(marks || {}).filter(([, m]) => m.mark).map(([z, m]) => [z, m.mark]).sort());
 let lastMarkSig = '';
+const drafts = {}; // zpid -> note text typed but not saved yet
 
 async function render() {
   const [{ scores = {}, marks = {} }, filters] = await Promise.all([chrome.storage.local.get(['scores', 'marks']), HouseFilters.load()]);
@@ -28,9 +29,28 @@ async function render() {
   }
   const newest = Math.max(...results.map((r) => r.scoredAt || 0));
   const y = window.scrollY;
+  const act = document.activeElement;
+  const focus = act && act.matches('textarea.cmt') ? { zpid: act.closest('[data-zpid]').dataset.zpid, a: act.selectionStart, b: act.selectionEnd } : null;
   el.innerHTML = HouseReport.renderBody(results, 'last updated ' + new Date(newest).toLocaleString(),
     { cfg: filters.cfg, marks, interactive: true, filterName: filters.active, town: tsel.value, groupByTown: grp.checked });
+  el.querySelectorAll('[data-zpid]').forEach((cell) => {
+    const ta = cell.querySelector('textarea.cmt');
+    ta.dataset.saved = (marks[cell.dataset.zpid] || {}).comment || '';
+    if (cell.dataset.zpid in drafts) { ta.value = drafts[cell.dataset.zpid]; showNoteState(cell); }
+  });
+  if (focus) {
+    const ta = el.querySelector(`[data-zpid="${CSS.escape(focus.zpid)}"] textarea.cmt`);
+    if (ta) { ta.focus({ preventScroll: true }); ta.setSelectionRange(focus.a, focus.b); }
+  }
   window.scrollTo(0, y);
+}
+
+function showNoteState(cell, msg) {
+  const unsaved = cell.dataset.zpid in drafts;
+  cell.querySelector('button[data-save]').disabled = !unsaved;
+  const m = cell.querySelector('.cmtmsg');
+  m.textContent = unsaved ? 'Not saved yet' : (msg || '');
+  m.classList.toggle('unsaved', unsaved);
 }
 
 const updateMark = (zpid, change) => HouseFilters.withLock(async () => {
@@ -40,28 +60,47 @@ const updateMark = (zpid, change) => HouseFilters.withLock(async () => {
   await chrome.storage.local.set({ marks });
 });
 
-// Show notes typed in another report tab without rebuilding the rows.
+// Show notes saved in another report tab without rebuilding the rows.
 function syncNotes(marks) {
   el.querySelectorAll('[data-zpid] textarea.cmt').forEach((ta) => {
-    const c = ((marks || {})[ta.closest('[data-zpid]').dataset.zpid] || {}).comment || '';
-    if (ta !== document.activeElement && ta.value !== c) ta.value = c;
+    const zpid = ta.closest('[data-zpid]').dataset.zpid;
+    const c = ((marks || {})[zpid] || {}).comment || '';
+    ta.dataset.saved = c;
+    if (!(zpid in drafts) && ta.value !== c) ta.value = c;
   });
 }
 
-el.addEventListener('click', (e) => {
+el.addEventListener('click', async (e) => {
+  const save = e.target.closest('button[data-save]');
+  if (save) {
+    const cell = save.closest('[data-zpid]');
+    const zpid = cell.dataset.zpid;
+    if (!(zpid in drafts)) return;
+    const comment = drafts[zpid];
+    save.disabled = true;
+    await updateMark(zpid, { comment });
+    if (drafts[zpid] === comment) delete drafts[zpid];
+    const now = el.querySelector(`[data-zpid="${CSS.escape(zpid)}"]`);
+    if (now) { now.querySelector('textarea.cmt').dataset.saved = comment; showNoteState(now, 'Saved'); }
+    return;
+  }
   const b = e.target.closest('button[data-act]');
   if (!b) return;
   const zpid = b.closest('[data-zpid]').dataset.zpid;
   updateMark(zpid, { mark: b.classList.contains('on') ? '' : b.dataset.act });
 });
 
-const commentTimers = {};
 el.addEventListener('input', (e) => {
   if (!e.target.matches('textarea.cmt')) return;
   const ta = e.target;
-  const zpid = ta.closest('[data-zpid]').dataset.zpid;
-  clearTimeout(commentTimers[zpid]);
-  commentTimers[zpid] = setTimeout(() => updateMark(zpid, { comment: ta.value }), 400);
+  const cell = ta.closest('[data-zpid]');
+  if (ta.value === (ta.dataset.saved || '')) delete drafts[cell.dataset.zpid];
+  else drafts[cell.dataset.zpid] = ta.value;
+  showNoteState(cell);
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (Object.keys(drafts).length) { e.preventDefault(); e.returnValue = ''; }
 });
 
 document.getElementById('town').onchange = (e) => { localStorage.townView = e.target.value; render(); };
@@ -110,7 +149,7 @@ document.getElementById('restoreFile').onchange = async (e) => {
 };
 chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local') return;
-  // Comment edits don't re-render, so typing isn't interrupted.
+  // Saving a note doesn't re-render, so the page doesn't jump.
   if (ch.scores || HouseFilters.isFilterChange(ch) || (ch.marks && markSig(ch.marks.newValue) !== lastMarkSig)) render();
   else if (ch.marks) syncNotes(ch.marks.newValue);
 });

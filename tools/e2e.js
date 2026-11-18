@@ -59,8 +59,17 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await sleep(800);
     await clickMark(0, 0, 'keep');
     await sleep(800);
-    await report.type('#report table tbody tr.kept textarea.cmt', 'Nice yard, ask about the porch');
+    // typing a note on an unmarked house must keep the cursor in the box until Save note is clicked
+    await report.type('#report table tbody tr:not(.kept):not(.excluded) textarea.cmt', 'Look at roof');
     await sleep(1200);
+    console.log('note box keeps focus:', await report.evaluate(() => document.activeElement.matches('textarea.cmt')),
+      '| state:', await report.$eval('#report tbody tr:not(.kept):not(.excluded) .cmtmsg', (e) => e.innerText),
+      '| stored before save:', JSON.stringify(Object.values((await report.evaluate(() => chrome.storage.local.get('marks'))).marks || {}).map((m) => m.comment || '')));
+    await report.$eval('#report tbody tr:not(.kept):not(.excluded) textarea.cmt', (e) => { e.value = ''; e.dispatchEvent(new Event('input', { bubbles: true })); });
+    await report.type('#report table tbody tr.kept textarea.cmt', 'Nice yard, ask about the porch');
+    await report.click('#report table tbody tr.kept button[data-save]');
+    await sleep(1200);
+    console.log('after Save note:', await report.$eval('#report tbody tr.kept .cmtmsg', (e) => e.innerText));
     // simultaneous writes for two houses must both survive
     await report.evaluate(() => {
       const rows = document.querySelectorAll('#report table')[0].querySelectorAll('tbody tr:not(.kept)');
@@ -68,6 +77,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const ta = rows[1].querySelector('textarea.cmt');
       ta.value = 'Carport only';
       ta.dispatchEvent(new Event('input', { bubbles: true }));
+      rows[1].querySelector('button[data-save]').click();
       rows[1].querySelector('button[data-act="keep"]').click();
     });
     await sleep(1500);

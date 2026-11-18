@@ -46,6 +46,10 @@
   .mk.no.on{background:#a11;border-color:#a11;color:#fff}
   .mk.keep:hover{border-color:#13692a}.mk.no:hover{border-color:#a11}
   textarea.cmt{width:100%;box-sizing:border-box;min-height:58px;font:14px Segoe UI,Arial,sans-serif;padding:5px;border:1px solid #c5cad6;border-radius:5px;resize:vertical}
+  .cmtbar{margin-top:4px;display:flex;align-items:center;gap:8px}
+  .savecmt{white-space:nowrap;font:600 14px Segoe UI,Arial,sans-serif;padding:4px 12px;border-radius:5px;cursor:pointer;border:2px solid #0b5ad6;background:#0b5ad6;color:#fff}
+  .savecmt:disabled{cursor:default;border-color:#c5cad6;background:#f3f3f3;color:#888}
+  .cmtmsg{font-size:13px;line-height:1.2;font-weight:600;color:#13692a}.cmtmsg.unsaved{color:#a15c00}
   .markbadge{display:inline-block;font-weight:700;font-size:14px;padding:2px 8px;border-radius:5px;color:#fff}
   .markbadge.keep{background:#13692a}.markbadge.no{background:#a11}
   .cmttext{font-size:14px;white-space:pre-wrap;margin-top:4px}
@@ -66,7 +70,8 @@
     if (interactive) {
       return `<td class="mine" data-zpid="${esc(r.zpid)}">
         <button class="mk keep${m.mark === 'keep' ? ' on' : ''}" data-act="keep" title="Mark as a house to keep">KEEP</button><button class="mk no${m.mark === 'no' ? ' on' : ''}" data-act="no" title="Move to Manually Excluded">NO</button>
-        <textarea class="cmt" placeholder="Your notes: why keep it or rule it out">${esc(m.comment)}</textarea></td>`;
+        <textarea class="cmt" placeholder="Your notes: why keep it or rule it out">${esc(m.comment)}</textarea>
+        <div class="cmtbar"><button class="savecmt" data-save disabled title="Save this note">Save note</button><span class="cmtmsg"></span></div></td>`;
     }
     const badge = m.mark ? `<span class="markbadge ${m.mark}">${m.mark === 'keep' ? 'KEEP' : 'NO'}</span>` : '';
     return `<td class="mine">${badge}${m.comment ? `<div class="cmttext">${esc(m.comment)}</div>` : ''}</td>`;
@@ -134,7 +139,7 @@
     return `<h1>House Scorer${town ? ` (${esc(town)})` : ''}: ${all.keep.length} possible, ${all.rejected.length} ruled out, ${all.excluded.length} manually excluded</h1>
       <div class="sub">${shown.length} listings${town ? ` in ${esc(town)} (${results.length} in all towns)` : ' scored'}${opts.filterName ? ` · filter: <b>${esc(opts.filterName)}</b>` : ''}${generatedAt ? ' · ' + esc(generatedAt) : ''}</div>
       <div class="legend"><span class="tag Match">Match</span> meets every must-have &nbsp; <span class="tag Check">Check</span> a must-have isn't in the listing (call the agent or look at photos) &nbsp; <span class="tag Rejected">Rejected</span> fails a must-have<br>
-      "?" means the listing doesn't say, which is worth 0 points. Must-haves: ${musts.length ? esc(musts.join(', ')) : 'none'}.${ctx.interactive ? '<br>Click <b>NO</b> to move a house to Manually Excluded (click it again to undo). Notes save as you type.' : ''}</div>
+      "?" means the listing doesn't say, which is worth 0 points. Must-haves: ${musts.length ? esc(musts.join(', ')) : 'none'}.${ctx.interactive ? '<br>Click <b>NO</b> to move a house to Manually Excluded (click it again to undo). Type a note, then click <b>Save note</b> under it.' : ''}</div>
       ${body}`;
   }
 
