@@ -56,6 +56,8 @@
   .old{font-size:13px;color:#a11}
   .pc{font-size:14px;font-weight:700;color:#0b5ad6}.pc.none{font-weight:400;color:#666}
   .scanned{font-size:13px;color:#666;margin-top:2px}
+  .gone{font-size:14px;font-weight:700;color:#a11}
+  .missing{font-size:13px;font-weight:600;color:#9a6a00}
   `;
 
   function wantCell(r, key) {
@@ -82,6 +84,18 @@
     return t ? `<div class="pc${/^No /.test(t) ? ' none' : ''}">${esc(t)}</div>` : '';
   }
 
+  const day = (t) => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  function statusLines(r, ctx) {
+    const st = S.goneStatus(r);
+    if (st) return `<div class="gone">${esc(st.label)}: no longer for sale</div>`;
+    const miss = S.missingFromSearch(r, ctx.searches, ctx.seenIn);
+    if (!miss) return '';
+    return `<div class="missing">Not in your latest ${esc(miss.label)} search (${day(miss.at)}). ${miss.checked
+      ? 'Zillow still lists it for sale, so it may no longer match your Zillow filters.'
+      : 'It may be under contract or sold. Open it and click "Score this house" to check.'}</div>`;
+  }
+
   function row(r, rank, ctx) {
     const m = ctx.marks[r.zpid] || {};
     const notes = r.musts.filter((x) => x.status !== 'pass')
@@ -93,7 +107,7 @@
       <td class="score">${r.score}</td>
       <td><span class="tag ${r.verdict}">${r.verdict}</span></td>
       ${mineCell(r, m, ctx.interactive)}
-      <td class="house"><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a><div>${money(r.price)} · ${r.beds ?? '?'} bd / ${r.baths ?? '?'} ba · ${r.sqft ? r.sqft.toLocaleString() : '?'} sq ft · upstairs room: ${up}</div>${pcLine(r)}<div class="notes">${notes}</div>${r.scoredAt ? `<div class="scanned">${esc(S.scanDateText(r))}</div>` : ''}${r.legacy ? '<div class="old">Scored by the old version with the original filter. Rescan to apply your current filter.</div>' : ''}</td>
+      <td class="house"><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a><div>${money(r.price)} · ${r.beds ?? '?'} bd / ${r.baths ?? '?'} ba · ${r.sqft ? r.sqft.toLocaleString() : '?'} sq ft · upstairs room: ${up}</div>${statusLines(r, ctx)}${pcLine(r)}<div class="notes">${notes}</div>${r.scoredAt ? `<div class="scanned">${esc(S.scanDateText(r))}</div>` : ''}${r.legacy ? '<div class="old">Scored by the old version with the original filter. Rescan to apply your current filter.</div>' : ''}</td>
       ${ctx.wantCols.map((w) => wantCell(r, w.key)).join('')}
     </tr>`;
   }
@@ -112,18 +126,22 @@
   function renderBody(results, generatedAt, opts = {}) {
     const cfg = S.normalizeConfig(opts.cfg);
     const marks = opts.marks || {};
-    const ctx = { cfg, marks, interactive: !!opts.interactive, max: S.maxScore(cfg), wantCols: S.WANTS.filter((w) => cfg.wants[w.key].on) };
+    const ctx = { cfg, marks, searches: opts.searches, seenIn: opts.seenIn, interactive: !!opts.interactive, max: S.maxScore(cfg), wantCols: S.WANTS.filter((w) => cfg.wants[w.key].on) };
     const isNo = (r) => (marks[r.zpid] || {}).mark === 'no';
     const town = opts.town && opts.town !== 'all' ? opts.town : null;
     const shown = town ? results.filter((r) => townName(r) === town) : results;
+    const gone = (r) => !!S.goneStatus(r);
     const split = (rs) => ({
-      keep: sortResults(rs.filter((r) => r.verdict !== 'Rejected' && !isNo(r))),
-      rejected: sortResults(rs.filter((r) => r.verdict === 'Rejected' && !isNo(r))),
-      excluded: sortResults(rs.filter(isNo)),
+      keep: sortResults(rs.filter((r) => r.verdict !== 'Rejected' && !isNo(r) && !gone(r))),
+      rejected: sortResults(rs.filter((r) => r.verdict === 'Rejected' && !isNo(r) && !gone(r))),
+      excluded: sortResults(rs.filter((r) => isNo(r) && !gone(r))),
+      gone: sortResults(rs.filter(gone)),
     });
+    const counts = (g) => `${g.keep.length} possible, ${g.rejected.length} ruled out, ${g.excluded.length} manually excluded${g.gone.length ? `, ${g.gone.length} no longer for sale` : ''}`;
     const sections = (g, H) => `${g.keep.length ? table(g.keep, ctx) : '<p>No houses passed yet.</p>'}
       ${g.rejected.length ? `<${H}>Ruled out (${g.rejected.length})</${H}>${table(g.rejected, ctx)}` : ''}
-      ${g.excluded.length ? `<${H}>Manually Excluded (${g.excluded.length})</${H}>${table(g.excluded, ctx)}` : ''}`;
+      ${g.excluded.length ? `<${H}>Manually Excluded (${g.excluded.length})</${H}>${table(g.excluded, ctx)}` : ''}
+      ${g.gone.length ? `<${H}>No longer for sale (${g.gone.length})</${H}><div class="sub">Pending, under contract, sold or off market when last scanned.</div>${table(g.gone, ctx)}` : ''}`;
     const all = split(shown);
     const musts = S.describeMusts(cfg);
     let body;
@@ -133,13 +151,14 @@
       body = `<div class="towns">Jump to: ${towns.map((t, i) => `<a href="#${id(i)}">${esc(t.name)} (${t.count})</a>`).join('')}</div>` +
         towns.map((t, i) => {
           const g = split(shown.filter((r) => townName(r) === t.name));
-          return `<h2 class="town" id="${id(i)}">${esc(t.name)}: ${g.keep.length} possible, ${g.rejected.length} ruled out, ${g.excluded.length} manually excluded</h2>${sections(g, 'h3')}`;
+          return `<h2 class="town" id="${id(i)}">${esc(t.name)}: ${counts(g)}</h2>${sections(g, 'h3')}`;
         }).join('');
     } else body = sections(all, 'h2');
-    return `<h1>House Scorer${town ? ` (${esc(town)})` : ''}: ${all.keep.length} possible, ${all.rejected.length} ruled out, ${all.excluded.length} manually excluded</h1>
+    return `<h1>House Scorer${town ? ` (${esc(town)})` : ''}: ${counts(all)}</h1>
       <div class="sub">${shown.length} listings${town ? ` in ${esc(town)} (${results.length} in all towns)` : ' scored'}${opts.filterName ? ` · filter: <b>${esc(opts.filterName)}</b>` : ''}${generatedAt ? ' · ' + esc(generatedAt) : ''}</div>
       <div class="legend"><span class="tag Match">Match</span> meets every must-have &nbsp; <span class="tag Check">Check</span> a must-have isn't in the listing (call the agent or look at photos) &nbsp; <span class="tag Rejected">Rejected</span> fails a must-have<br>
-      "?" means the listing doesn't say, which is worth 0 points. Must-haves: ${musts.length ? esc(musts.join(', ')) : 'none'}.${ctx.interactive ? '<br>Click <b>NO</b> to move a house to Manually Excluded (click it again to undo). Type a note, then click <b>Save note</b> under it.' : ''}</div>
+      "?" means the listing doesn't say, which is worth 0 points. Must-haves: ${musts.length ? esc(musts.join(', ')) : 'none'}.${ctx.interactive ? '<br>Click <b>NO</b> to move a house to Manually Excluded (click it again to undo). Type a note, then click <b>Save note</b> under it.'
+        + '<br>The report only changes when you click <b>Score all houses in this search</b> on Zillow; each house shows the day it was scanned. Rescan your searches every few days (all pages) to pick up new houses and find ones that went under contract or sold.' : ''}</div>
       ${body}`;
   }
 

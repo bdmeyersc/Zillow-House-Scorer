@@ -125,6 +125,7 @@
     const more = [h.perSqft != null && `$${n(h.perSqft)}/sq ft`, h.yearBuilt != null && `Built ${h.yearBuilt}`].filter(Boolean).join(' · ');
     const lines = [
       h.price != null && `<div style="font-size:20px;font-weight:700">$${n(Math.round(h.price))}</div>`,
+      S.goneStatus(r) && `<div style="font-weight:700;color:#a11">${escHtml(S.goneStatus(r).label)}: no longer for sale</div>`,
       pc && `<div style="font-size:13px;font-weight:600;color:${/^No /.test(pc) ? '#555' : '#0b5ad6'}">${escHtml(pc)}</div>`,
       h.street && `<div style="font-weight:600">${escHtml(h.street)}</div>`,
       size && `<div>${size}</div>`,
@@ -178,18 +179,46 @@
     });
   }
 
-  async function scoreSearch() {
-    scanning = true; stopRequested = false;
-    renderButtons();
-    setStatus('Finding houses in these results…');
-    const urls = await collectSearchUrls();
-    const { scores = {} } = await chrome.storage.local.get('scores');
-    const fresh = (u) => { const s = scores[zpidOf(u)]; return s && s.facts && Date.now() - s.scoredAt < CACHE_HOURS * 3600e3; };
-    const todo = urls.filter((u) => !fresh(u));
-    let done = 0, failed = 0;
-    for (const url of todo) {
+  // The search this page shows, without the page number: { key, label, page }, or null for a map-only search with no place in it.
+  function searchInfo() {
+    let q = {};
+    try { q = JSON.parse(new URLSearchParams(location.search).get('searchQueryState') || '{}') || {}; } catch (e) { /* not JSON */ }
+    const pm = location.pathname.match(/\/(\d+)_p\/?$/);
+    const path = location.pathname.replace(/\d+_p\/?$/, '').replace(/\/?$/, '/');
+    const region = (q.regionSelection || []).map((x) => x && x.regionId).filter(Boolean).sort().join(',') || q.usersSearchTerm || '';
+    if (!region && /^\/homes\//.test(path)) return null;
+    const fromPath = path.split('/').filter(Boolean)[0] || '';
+    const label = q.usersSearchTerm || (document.title.match(/^(.+?) Real Estate\b/) || [])[1]
+      || fromPath.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).replace(/ (\w\w)$/i, (m) => m.toUpperCase());
+    const page = (q.pagination && q.pagination.currentPage) || (pm ? +pm[1] : 1);
+    return { key: path + (region ? '|' + region : ''), label, page };
+  }
+
+  const nextPageLink = () => document.querySelector('a[title="Next page"]:not([aria-disabled="true"]), a[rel="next"]');
+  const RUN_HOURS = 12;
+
+  // Notes which houses this search found. A run starts on page 1 and is a full pass once every page up to the last one was
+  // scanned in order; houses seen before that pass but not in it are the ones that dropped out of the search.
+  const recordSearch = (info, urls) => window.HouseFilters.withLock(async () => {
+    const { searches = {}, seenIn = {} } = await chrome.storage.local.get(['searches', 'seenIn']);
+    const s = searches[info.key] || {};
+    const now = Date.now();
+    const goesOn = s.run && info.page > 1 && info.page === s.run.page + 1 && now - s.run.at < RUN_HOURS * 3600e3;
+    s.run = goesOn ? { ...s.run, page: info.page } : { at: now, page: info.page, partial: info.page !== 1 };
+    s.label = info.label;
+    urls.forEach((u) => { const z = zpidOf(u); if (z) (seenIn[z] = seenIn[z] || {})[info.key] = s.run.at; });
+    const full = !!urls.length && !s.run.partial && !nextPageLink();
+    if (full) s.fullAt = s.run.at;
+    searches[info.key] = s;
+    await chrome.storage.local.set({ searches, seenIn });
+    return { full, at: s.run.at };
+  });
+
+  // Opens each house in a background tab to score it. Returns false if Zillow asked to prove you are human.
+  async function scanUrls(list, say, count) {
+    for (const url of list) {
       if (stopRequested) break;
-      setStatus(`Scoring house ${done + failed + 1} of ${todo.length}<div style="font-size:13px;color:#555">(${urls.length - todo.length} already scored today). A tab opens and closes for each house; please leave them alone.</div>`);
+      setStatus(say(count.done + count.failed + 1));
       const { tabId } = await send({ type: 'openScan', url });
       const res = await waitForScan(zpidOf(url), 60000);
       if (res.status === 'blocked') {
@@ -198,18 +227,44 @@
         scanning = false;
         setStatus('Zillow wants to check you are human. In the tab that just opened, do the "Press & Hold", then come back here and click <b>Resume scoring</b>.');
         renderButtons();
-        return;
+        return false;
       }
       await send({ type: 'closeTab', tabId });
-      if (res.status === 'ok') done++; else failed++;
+      if (res.status === 'ok') count.done++; else count.failed++;
       await sleep(3000 + Math.random() * 4000);
     }
+    return true;
+  }
+
+  async function scoreSearch() {
+    scanning = true; stopRequested = false;
+    renderButtons();
+    setStatus('Finding houses in these results…');
+    const urls = await collectSearchUrls();
+    const info = searchInfo();
+    const run = info ? await recordSearch(info, urls) : { full: false };
+    const { scores = {} } = await chrome.storage.local.get('scores');
+    const fresh = (u) => { const s = scores[zpidOf(u)]; return s && s.facts && Date.now() - s.scoredAt < CACHE_HOURS * 3600e3; };
+    const todo = urls.filter((u) => !fresh(u));
+    const count = { done: 0, failed: 0 };
+    if (!await scanUrls(todo, (i) => `Scoring house ${i} of ${todo.length}<div style="font-size:13px;color:#555">(${urls.length - todo.length} already scored today). A tab opens and closes for each house; please leave them alone.</div>`, count)) return;
+    // Houses this search found before but not on this full pass: re-read them to see if they are under contract or sold.
+    let dropped = [];
+    if (run.full && !stopRequested) {
+      const { scores: now = {}, seenIn = {} } = await chrome.storage.local.get(['scores', 'seenIn']);
+      dropped = Object.entries(seenIn)
+        .filter(([z, k]) => k[info.key] < run.at && now[z] && now[z].url && !S.goneStatus(now[z]) && !fresh(now[z].url))
+        .map(([z]) => now[z].url);
+    }
+    const checked = { done: 0, failed: 0 };
+    if (!await scanUrls(dropped, (i) => `Checking house ${i} of ${dropped.length} that is no longer in this search, to see if it is under contract or sold. Please leave the tabs alone.`, checked)) return;
     scanning = false;
-    const next = document.querySelector('a[title="Next page"]:not([aria-disabled="true"]), a[rel="next"]');
-    setStatus(`Finished: ${done} scored${failed ? `, ${failed} couldn't be read` : ''}${urls.length - todo.length ? `, ${urls.length - todo.length} already scored` : ''}.` +
+    const next = nextPageLink();
+    setStatus(`Finished: ${count.done} scored${count.failed ? `, ${count.failed} couldn't be read` : ''}${urls.length - todo.length ? `, ${urls.length - todo.length} already scored` : ''}.` +
+      (dropped.length ? ` Checked ${dropped.length} house${dropped.length > 1 ? 's' : ''} no longer in this search.` : '') +
       (next ? '<div style="margin-top:4px">There are more pages: click <b>Next page</b> at the bottom of the list, then click the button again.</div>' : ''));
     renderButtons();
-    if (done) send({ type: 'openReport' });
+    if (count.done || checked.done) send({ type: 'openReport' });
   }
 
   async function init() {

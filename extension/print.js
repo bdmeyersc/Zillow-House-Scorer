@@ -4,13 +4,15 @@ const n = (x) => Number(x).toLocaleString('en-US');
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const unticked = new Set();
-let keep = [], marks = {}, filterName = '';
+let keep = [], gone = 0, marks = {}, filterName = '';
 
 async function load() {
   const [{ scores = {}, marks: m = {} }, filters] = await Promise.all([chrome.storage.local.get(['scores', 'marks']), HouseFilters.load()]);
   marks = m;
   filterName = filters.active;
-  keep = Object.values(scores).filter((r) => (marks[r.zpid] || {}).mark === 'keep').map((r) => S.rescore(r, filters.cfg));
+  const kept = Object.values(scores).filter((r) => (marks[r.zpid] || {}).mark === 'keep');
+  keep = kept.filter((r) => !S.goneStatus(r)).map((r) => S.rescore(r, filters.cfg));
+  gone = kept.length - keep.length;
   const towns = R.townList(keep).filter((t) => t.count);
   const sel = $('town');
   const prev = sel.value || new URLSearchParams(location.search).get('town');
@@ -26,11 +28,16 @@ function sizeText(h) {
     h.perSqft != null && `$${n(h.perSqft)}/sq ft`, h.yearBuilt != null && `Built ${h.yearBuilt}`].filter(Boolean).join(' · ');
 }
 
+const goneNote = () => {
+  if (gone) $('list').insertAdjacentHTML('afterbegin', `<p class="gonenote">${gone} KEEP house${gone > 1 ? 's are' : ' is'} no longer for sale (pending, sold or off market) and ${gone > 1 ? 'are' : 'is'} left out. See the bottom of the report.</p>`);
+};
+
 function renderList() {
   const rs = shown();
   if (!rs.length) {
     $('list').innerHTML = keep.length ? '<p>No KEEP houses in this town.</p>' : '<p>You haven\'t marked any houses KEEP yet. Click <b>KEEP</b> next to a house in the report first.</p>';
     $('make').disabled = true;
+    goneNote();
     return;
   }
   $('make').disabled = false;
@@ -40,6 +47,7 @@ function renderList() {
       <td><label for="${esc(id)}"><b>${esc(r.address || r.url)}</b><br>${esc(sizeText(S.houseInfo(r)))}</label></td>
       <td>${r.score} ${esc(r.verdict)}</td><td>${esc((marks[r.zpid] || {}).comment || '')}</td></tr>`;
   }).join('')}</tbody></table>`;
+  goneNote();
 }
 
 // ---- finding houses on the map ----

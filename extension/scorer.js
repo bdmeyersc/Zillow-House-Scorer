@@ -135,6 +135,8 @@
       description: p.description || '',
       price: typeof p.price === 'number' ? p.price : null,
       lat: coord(p.latitude), lng: coord(p.longitude),
+      homeStatus: typeof p.homeStatus === 'string' ? p.homeStatus : null,
+      contingent: typeof p.contingentListingType === 'string' ? p.contingentListingType : null,
       priceHistory: Array.isArray(p.priceHistory) && p.priceHistory.length
         ? p.priceHistory.filter((h) => h && /^\d{4}-\d{2}-\d{2}/.test(h.date || '')).map((h) => ({ date: h.date.slice(0, 10), event: h.event || '', price: typeof h.price === 'number' ? h.price : null }))
         : null,
@@ -168,6 +170,28 @@
       out.push({ date: `${d[3]}-${d[1].padStart(2, '0')}-${d[2].padStart(2, '0')}`, event, price });
     }
     return out.length ? out : null;
+  }
+
+  const pretty = (s) => s.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+  const STATUS_JSON = { FOR_SALE: 'active', COMING_SOON: 'active', PRE_FORECLOSURE: 'active', FORECLOSED: 'active', AUCTION: 'active', NEW_CONSTRUCTION: 'active',
+    PENDING: 'pending', RECENTLY_SOLD: 'sold', SOLD: 'sold', OFF_MARKET: 'off', OTHER: 'off', FOR_RENT: 'off' };
+  const STATUS_TEXT = [[/^(pending|contingent|under contract|active under contract|accepting backup offers)\b/i, 'pending'],
+    [/^sold\b/i, 'sold'], [/^off market\b/i, 'off'], [/^(for sale|coming soon|new construction|auction|foreclosure|pre-foreclosure)\b/i, 'active']];
+
+  // { kind: 'active' | 'pending' | 'sold' | 'off', label } from Zillow's page data or the status line above the price; null when neither is found.
+  function listingStatus(head, extras) {
+    const hs = extras && extras.homeStatus;
+    if (hs && STATUS_JSON[hs]) {
+      const c = extras.contingent && extras.contingent !== 'NONE' ? extras.contingent : null;
+      if (STATUS_JSON[hs] === 'active' && c) return { kind: 'pending', label: pretty(c) };
+      return { kind: STATUS_JSON[hs], label: hs === 'OTHER' ? 'Off market' : pretty(hs) };
+    }
+    for (const l of head) {
+      if (l.length > 40) continue;
+      const hit = STATUS_TEXT.find(([re]) => re.test(l));
+      if (hit) return { kind: hit[1], label: l.replace(/[:.]?\s*$/, '') };
+    }
+    return null;
   }
 
   function parseListing(rawLines, meta = {}, extras = null) {
@@ -248,6 +272,7 @@
       description, yearBuilt,
       priceHistory: priceHistory(rawLines, extras),
       priceCut: cut ? { amount: num(cut[1]), month: +cut[2], day: +cut[3] } : null,
+      listingStatus: listingStatus(head, extras),
       lat: extras ? extras.lat : null, lng: extras ? extras.lng : null,
       levels: get('levels'), stories: get('stories'),
       roomLevels: get('level'),
@@ -633,6 +658,20 @@
   // "Scanned Nov 2, 2026" from when the house was last read.
   const scanDateText = (r) => (r.scoredAt ? 'Scanned ' + new Date(r.scoredAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '');
 
+  // The status read at the last scan when it isn't for sale (pending, under contract, sold, off market); null otherwise.
+  const goneStatus = (r) => { const st = (r.facts || {}).listingStatus; return st && st.kind !== 'active' ? st : null; };
+
+  // Houses found by an earlier scan of a search that a later full pass (every page) didn't find:
+  // { label, at, checked } where checked means the house was re-read after that pass and is still listed for sale.
+  function missingFromSearch(r, searches, seenIn) {
+    const seen = (seenIn || {})[r.zpid] || {};
+    for (const [key, at] of Object.entries(seen)) {
+      const s = (searches || {})[key];
+      if (s && s.fullAt && at < s.fullAt) return { label: s.label || key, at: s.fullAt, checked: (r.scoredAt || 0) >= s.fullAt };
+    }
+    return null;
+  }
+
   function searchListingUrls(doc) {
     const urls = new Map();
     const add = (href) => {
@@ -644,7 +683,7 @@
     return [...urls.values()];
   }
 
-  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants, feeText, priceChange, priceChangeText, scanDateText };
+  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants, feeText, priceChange, priceChangeText, scanDateText, goneStatus, missingFromSearch };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseScorer = api;
 })(typeof self !== 'undefined' ? self : this);

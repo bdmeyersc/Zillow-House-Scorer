@@ -168,5 +168,40 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await pp.screenshot({ path: ROOT + '/samples/shot_print_sheet.png', fullPage: true });
     await pp.pdf({ path: ROOT + '/samples/print_sheet.pdf', format: 'letter' });
   }
+
+  // Rescan a day later: 77 Oak Rd and 3 Lake Dr drop out of the search (77 Oak is now under contract, 3 Lake is still for sale),
+  // and 9 Pine Ln is still in the search but Zillow's page data says it's pending.
+  if (report) {
+    await page.goto('https://www.zillow.com/__set?drop=200000004,200000005&text=200000004:Under%20contract&json=200000005:FOR_SALE&json=200000003:PENDING');
+    await report.evaluate(async () => {
+      const { scores } = await chrome.storage.local.get('scores');
+      for (const r of Object.values(scores)) r.scoredAt -= 2 * 86400e3;
+      await chrome.storage.local.set({ scores });
+    });
+    await page.goto('https://www.zillow.com/sumter-sc/', { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('#house-scorer-panel', { timeout: 15000 });
+    await page.evaluate(() => [...document.querySelectorAll('#house-scorer-panel button')].find((b) => /Score all/.test(b.textContent)).click());
+    for (let i = 0; i < 120; i++) {
+      await sleep(3000);
+      text = await page.$eval('#hs-status', (e) => e.innerText);
+      if (/Finished|Zillow wants/.test(text)) break;
+    }
+    console.log('RESCAN:', text.replace(/\n/g, ' '));
+    await report.bringToFront();
+    await report.reload();
+    await sleep(1500);
+    console.log('rescan h1:', await report.$eval('h1', (e) => e.innerText));
+    console.log('section headings:', JSON.stringify(await report.$$eval('#report h2, #report h3', (els) => els.map((e) => e.innerText))));
+    console.log('status lines:', JSON.stringify(await report.$$eval('#report td.house', (tds) => tds.map((td) => [td.querySelector('a').innerText.split(',')[0], (td.querySelector('.gone, .missing') || {}).innerText || '']).filter((x) => x[1]))));
+    await report.screenshot({ path: ROOT + '/samples/shot_report_status.png', fullPage: true });
+    const pp2 = await browser.newPage();
+    await pp2.goto(report.url().replace('results.html', 'print.html?town=all'));
+    await sleep(1500);
+    console.log('print after rescan:', await pp2.$$eval('#list tbody tr', (r) => r.length), '|', await pp2.$eval('#list', (e) => (e.querySelector('.gonenote') || {}).innerText || ''));
+    const lp2 = await browser.newPage();
+    await lp2.goto('https://www.zillow.com/homedetails/77-Oak-Rd-Longs-SC-29568/200000004_zpid/', { waitUntil: 'domcontentloaded' });
+    await sleep(4000);
+    console.log('listing panel (under contract):', (await lp2.$eval('#hs-status', (e) => e.innerText)).replace(/\n/g, ' | '));
+  }
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
