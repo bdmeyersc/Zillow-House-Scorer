@@ -318,6 +318,27 @@ test('disconnect: stops automatic saves until "Save to Drive now"', async () => 
   assert.deepStrictEqual(b.drive.calls.slice(-2), ['LIST', 'UPDATE']);
 });
 
+test('disconnect while a save is uploading: stays disconnected', async () => {
+  const b = boot({ data: sampleData() });
+  await settle();
+  await b.send({ type: 'driveSaveNow' });
+  await b.set({ marks: {} });
+  let release;
+  const realFetch = b.drive.fetch;
+  b.drive.fetch = async (...a) => { await new Promise((r) => { release = r; }); b.drive.fetch = realFetch; return realFetch(...a); };
+  await b.advance(MIN); // the automatic save starts and waits on Drive
+  const off = b.send({ type: 'driveDisconnect' });
+  await settle();
+  release();
+  await off;
+  await settle();
+  assert.ok(b.store.driveSync.disconnected, 'still disconnected after the save finished');
+  const before = b.drive.calls.length;
+  await b.set({ marks: { 1000: { mark: 'keep', updatedAt: 9 } } });
+  await b.advance(MIN);
+  assert.strictEqual(b.drive.calls.length, before);
+});
+
 test('not set up: the placeholder client ID gives a clear message and no upload', async () => {
   const b = boot({ data: sampleData(), clientId: MANIFEST.oauth2.client_id });
   await settle();

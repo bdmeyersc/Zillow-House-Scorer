@@ -132,7 +132,7 @@
         }
         const s = await state();
         const again = (s.dirtyAt || 0) > startedAt;
-        const out = await setState({ saving: false, dirty: again, lastOkAt: now(), lastName: name, lastHash: h, fileId: file.id, error: null, errorAt: null, disconnected: false });
+        const out = await setState({ saving: false, dirty: again, lastOkAt: now(), lastName: name, lastHash: h, fileId: file.id, error: null, errorAt: null, ...(interactive ? { disconnected: false } : {}) });
         if (again) await setState({ dueAt: await schedule() });
         return out;
       } catch (e) {
@@ -141,7 +141,14 @@
       }
     }
 
-    async function disconnect() {
+    // Waits for any save in progress, so that save can't undo the disconnect.
+    function disconnect() {
+      const run = (running || Promise.resolve()).then(disconnectNow);
+      running = run.catch(() => {});
+      return run;
+    }
+
+    async function disconnectNow() {
       let tok = null;
       try { tok = await token(false); } catch (e) { /* not signed in */ }
       if (tok) {
