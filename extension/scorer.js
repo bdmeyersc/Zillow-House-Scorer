@@ -175,8 +175,11 @@
   const pretty = (s) => s.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
   const STATUS_JSON = { FOR_SALE: 'active', COMING_SOON: 'active', PRE_FORECLOSURE: 'active', FORECLOSED: 'active', AUCTION: 'active', NEW_CONSTRUCTION: 'active',
     PENDING: 'pending', RECENTLY_SOLD: 'sold', SOLD: 'sold', OFF_MARKET: 'off', OTHER: 'off', FOR_RENT: 'off' };
-  const STATUS_TEXT = [[/^(pending|contingent|under contract|active under contract|accepting backup offers)\b/i, 'pending'],
-    [/^sold\b/i, 'sold'], [/^off market\b/i, 'off'], [/^(for sale|coming soon|new construction|auction|foreclosure|pre-foreclosure)\b/i, 'active']];
+  // A status line is just the status, optionally followed by a date or price ("Sold on 10/1/2026", "Pending: $300,000").
+  const END = '(?:\\s*(?:on\\b|:|·|\\$|\\d).*)?$';
+  const STATUS_TEXT = [[new RegExp('^(?:pending|contingent|under contract|active under contract|accepting backup offers)' + END, 'i'), 'pending'],
+    [new RegExp('^sold' + END, 'i'), 'sold'], [new RegExp('^off market' + END, 'i'), 'off'],
+    [new RegExp('^(?:for sale|for sale by owner|coming soon|new construction|auction|foreclosure|pre-foreclosure)' + END, 'i'), 'active']];
 
   // { kind: 'active' | 'pending' | 'sold' | 'off', label } from Zillow's page data or the status line above the price; null when neither is found.
   function listingStatus(head, extras) {
@@ -186,7 +189,8 @@
       if (STATUS_JSON[hs] === 'active' && c) return { kind: 'pending', label: pretty(c) };
       return { kind: STATUS_JSON[hs], label: hs === 'OTHER' ? 'Off market' : pretty(hs) };
     }
-    for (const l of head) {
+    const special = head.findIndex((l) => /^what's special$/i.test(l));
+    for (const l of special >= 0 ? head.slice(0, special) : head) {
       if (l.length > 40) continue;
       const hit = STATUS_TEXT.find(([re]) => re.test(l));
       if (hit) return { kind: hit[1], label: l.replace(/[:.]?\s*$/, '') };
