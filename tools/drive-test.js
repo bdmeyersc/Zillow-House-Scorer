@@ -16,6 +16,13 @@ function fakeDrive() {
       let h = 0; for (const c of a) h = (h * 31 + c.charCodeAt(0)) % 1000;
       return json({ result: { addressMatches: [{ coordinates: { y: 33.9 + h / 10000, x: -80.3 - h / 10000 } }] } });
     }
+    if (u.hostname === 'router.project-osrm.org') {
+      d.routes = (d.routes || 0) + 1;
+      if (d.routeDown) throw new TypeError('Failed to fetch');
+      const pts = u.pathname.split('/').pop().split(';').map((c) => c.split(',').map(Number));
+      const meters = pts.map((a) => pts.map((b) => (d.roadMeters ? d.roadMeters(a, b) : 1.3 * 111000 * Math.hypot(a[0] - b[0], a[1] - b[1]))));
+      return json({ code: 'Ok', distances: meters, durations: meters.map((row) => row.map((m) => m / 20)) });
+    }
     if (u.hostname === 'oauth2.googleapis.com') { d.calls.push('REVOKE'); return json({}); }
     if (d.offline) throw new TypeError('Failed to fetch');
     if (d.expireNext) { d.expireNext = false; d.calls.push('401'); return json({ error: { message: 'Invalid Credentials' } }, 401); }
@@ -100,7 +107,7 @@ function boot({ clientId = '1234-test.apps.googleusercontent.com', data = {}, dr
   };
   let chain = Promise.resolve();
   const ctx = {
-    chrome, console, URL, Blob, TextEncoder, Intl, setTimeout, clearTimeout,
+    chrome, console, URL, Blob, TextEncoder, Intl, setTimeout, clearTimeout, AbortController,
     fetch: (...a) => drive.fetch(...a),
     navigator: { locks: { request: (n, fn) => (chain = chain.then(fn, fn)) } },
   };
@@ -366,6 +373,43 @@ test('not set up: the placeholder client ID gives a clear message and no upload'
   assert.deepStrictEqual(b.identity.asked, []);
 });
 
+// Start S with houses A, B, C in a straight line north of it. By road, A is a long way round from S (a river), so the drive is S, B, C, A.
+function routeCase(b) {
+  const pt = { S: [-80.3, 33.9], A: [-80.3, 33.91], B: [-80.3, 33.92], C: [-80.3, 33.93] };
+  const name = ([lng, lat]) => Object.keys(pt).find((k) => Math.abs(pt[k][0] - lng) < 1e-6 && Math.abs(pt[k][1] - lat) < 1e-6);
+  const road = { AS: 10000, BS: 1000, CS: 2000, AB: 5000, AC: 500, BC: 1000 };
+  b.drive.roadMeters = (p, q) => { const [x, y] = [name(p), name(q)].sort(); return x === y ? 0 : road[x + y]; };
+  const rs = ['A', 'B', 'C'].map((k) => ({ zpid: k, address: k }));
+  const found = Object.fromEntries(rs.map((r) => [r.zpid, { lat: pt[r.zpid][1], lng: pt[r.zpid][0] }]));
+  return { rs, found, start: { lat: pt.S[1], lng: pt.S[0], address: 'S' } };
+}
+
+test('driving order uses road miles from the route service', async () => {
+  const b = boot();
+  const { rs, found, start } = routeCase(b);
+  const K = b.ctx.HouseKeepList;
+  const res = await K.routeByRoad(rs, found, start);
+  assert.strictEqual(res.road, true);
+  assert.strictEqual(res.stops.map((s) => s.r.zpid).join(), 'B,C,A');
+  assert.strictEqual(res.total.toFixed(2), (2500 / 1609.344).toFixed(2));
+  assert.strictEqual(K.legText(res.stops[0], 'the start'), '0.6 mi, 1 min by road from the start');
+  assert.match(K.distanceText(res), /^About 1\.6 miles and 2 min of driving between stops, by road/);
+  assert.strictEqual(K.mapsUrls(start, res.stops).map((m) => m.label).join(), 'Start to stop 3');
+  assert.match(K.mapsUrls(start, res.stops)[0].url, /origin=S&destination=A&waypoints=B%7CC$/);
+});
+
+test('route service down: falls back to straight-line order, and says so', async () => {
+  const b = boot();
+  const { rs, found, start } = routeCase(b);
+  b.drive.routeDown = true;
+  const K = b.ctx.HouseKeepList;
+  const res = await K.routeByRoad(rs, found, start);
+  assert.strictEqual(res.road, false);
+  assert.strictEqual(res.stops.map((s) => s.r.zpid).join(), 'A,B,C');
+  assert.match(K.legText(res.stops[0], 'the start'), /mi from the start \(straight line\)$/);
+  assert.match(K.distanceText(res), /straight lines .*road distances weren't available/);
+});
+
 test('the PDF has the printed list as real text, in driving order from 2911 Waverly Rd', async () => {
   const data = sampleData();
   const b = boot({ data });
@@ -389,7 +433,13 @@ test('the PDF has the printed list as real text, in driving order from 2911 Wave
   for (const r of Object.values(data.scores).filter((r) => data.marks[r.zpid].mark === 'no')) assert.ok(!text.includes(r.address), 'NO house left out');
   assert.strictEqual((text.match(/^Score -?\d+ \w+/gm) || []).length, kept.length, 'a score for every house');
   assert.match(text, /Has: /);
-  assert.match(text, /mi from the start/);
+  assert.match(text, /mi, \d+ min by road from the start/);
+  assert.match(text.replace(/\s+/g, " "), /by road \(time at each house not included\)/);
+  assert.match(text, /Directions in Google Maps\s*\nStart to stop \d+:/);
+  const doc = await require('pdfjs-dist/legacy/build/pdf.js').getDocument({ data: new Uint8Array(f.bytes), disableFontFace: true, verbosity: 0 }).promise;
+  const urls = (await (await doc.getPage(1)).getAnnotations()).map((a) => a.url);
+  assert.ok(urls.some((u) => u && u.startsWith('https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=2911%20Waverly%20Rd')), 'tap-to-drive Google Maps link');
+  assert.ok(urls.some((u) => u && u.startsWith('https://www.zillow.com/')), 'listing links are clickable');
   // Same order as the print view: HouseKeepList.order from the same start.
   const nums = [...text.matchAll(/^(\d+)\. (.+)$/gm)].map((m) => m[1]);
   assert.deepStrictEqual(nums, kept.map((_, i) => String(i + 1)));

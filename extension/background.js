@@ -9,8 +9,8 @@ async function buildKeepPdf(date) {
   const { keep, gone } = K.keptHouses(scores, marks, filters.cfg);
   const start = await K.locateStart(K.HOME);
   const found = await K.locateAll(keep);
-  const { stops, total } = K.order(keep, found, start);
-  const items = K.textReport({ town: 'All towns', stops, total, start, startText: K.HOME, gone, filterName: filters.active, marks });
+  const { stops, total, minutes, road } = await K.routeByRoad(keep, found, start);
+  const items = K.textReport({ town: 'All towns', stops, total, minutes, road, start, startText: K.HOME, gone, filterName: filters.active, marks });
   const made = date.toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' });
   const text = JSON.stringify(items);
   const withTime = [items[0], { kind: 'sub', text: `Made ${made} (Eastern time)` }, ...items.slice(1)];

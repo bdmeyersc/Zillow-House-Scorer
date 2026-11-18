@@ -68,7 +68,8 @@ PRINTING KEEP HOUSES FOR A DRIVE
    home address). It's remembered for next time.
 4. Click "Make my driving list". It looks each address up on a map
    (US Census and OpenStreetMap, free) and puts the houses in the order
-   that keeps the drive shortest.
+   that keeps the drive shortest by road miles (OSRM, free). If the road
+   service doesn't answer, it uses straight-line miles and says so.
 5. Click "Print or save as PDF". To get a PDF, set Destination to
    "Save as PDF" and click Save. "Save as HTML file" saves a copy you
    can open on your phone. The page also has Google Maps direction links

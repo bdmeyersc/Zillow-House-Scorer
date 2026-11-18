@@ -94,6 +94,47 @@
     return g ? { ...g, address: addr } : null;
   }
 
+  // Road miles and minutes between every pair of points, from the free OSRM route service; null if it can't answer.
+  const OSRM = 'https://router.project-osrm.org/table/v1/driving/';
+  async function roadTable(pts) {
+    if (pts.length < 2 || pts.length > 100) return null;
+    let timer;
+    try {
+      const ctl = new AbortController();
+      timer = setTimeout(() => ctl.abort(), 20000);
+      const coords = pts.map((p) => `${Number(p.lng).toFixed(6)},${Number(p.lat).toFixed(6)}`).join(';');
+      const res = await fetch(`${OSRM}${coords}?annotations=distance,duration`, { signal: ctl.signal });
+      const j = await res.json();
+      const full = (m) => Array.isArray(m) && m.length === pts.length && m.every((row) => row.length === pts.length && row.every((v) => typeof v === 'number'));
+      return j.code === 'Ok' && full(j.distances) && full(j.durations) ? { meters: j.distances, seconds: j.durations } : null;
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Like order(), but by road miles when the route service answers (road: true); otherwise straight lines (road: false).
+  // Road stops also get minutes of driving from the one before.
+  async function routeByRoad(rs, found, start) {
+    const located = rs.filter((r) => found[r.zpid]).map((r) => ({ r, loc: found[r.zpid], lat: found[r.zpid].lat, lng: found[r.zpid].lng }));
+    const pts = (start ? [start] : []).concat(located);
+    const tab = await roadTable(pts);
+    if (!tab) return { ...order(rs, found, start), road: false };
+    const ix = new Map(pts.map((p, i) => [p, i]));
+    const d = (a, b) => tab.meters[ix.get(a)][ix.get(b)];
+    const stops = Route.orderStops(located, start, d).concat(rs.filter((r) => !found[r.zpid]).map((r) => ({ r, loc: null })));
+    let total = 0, minutes = 0;
+    stops.forEach((s, i) => {
+      const prev = i ? stops[i - 1] : start;
+      const known = s.loc && prev && ix.has(prev);
+      s.miles = known ? d(prev, s) / 1609.344 : null;
+      s.minutes = known ? tab.seconds[ix.get(prev)][ix.get(s)] / 60 : null;
+      if (known) { total += s.miles; minutes += s.minutes; }
+    });
+    return { stops, total, minutes, road: true };
+  }
+
   // Stops in driving order from start; houses not found on the map go last. Each stop gets miles from the one before.
   function order(rs, found, start) {
     const located = rs.filter((r) => found[r.zpid]).map((r) => ({ r, loc: found[r.zpid], lat: found[r.zpid].lat, lng: found[r.zpid].lng }));
@@ -107,23 +148,45 @@
     return { stops, total };
   }
 
-  const legText = (s, prevLabel) => (s.miles != null ? `${s.miles < 0.1 ? 'next door to' : `${s.miles.toFixed(1)} mi from`} ${prevLabel}` : '');
+  const minText = (m) => (m < 59.5 ? `${Math.max(1, Math.round(m))} min` : `${Math.floor(Math.round(m) / 60)} hr ${Math.round(m) % 60} min`);
+  const legText = (s, prevLabel) => (s.miles == null ? ''
+    : s.minutes != null ? `${s.miles < 0.1 ? 'next door to' : `${s.miles.toFixed(1)} mi, ${minText(s.minutes)} by road from`} ${prevLabel}`
+      : `${s.miles < 0.1 ? 'next door to' : `${s.miles.toFixed(1)} mi from`} ${prevLabel} (straight line)`);
+  const distanceText = ({ total, minutes, road }) => (road
+    ? `About ${total.toFixed(1)} miles and ${minText(minutes)} of driving between stops, by road (time at each house not included).`
+    : `About ${total.toFixed(1)} miles in straight lines between stops (the roads will be longer; road distances weren't available).`);
+
+  // Google Maps driving directions through the stops in order, 10 points per link (Google's limit).
+  function mapsUrls(start, stops) {
+    const pts = (start ? [{ label: 'start', address: start.address }] : []).concat(stops.filter((s) => s.loc).map((s, i) => ({ label: String(i + 1), address: s.r.address })));
+    const enc = encodeURIComponent, out = [];
+    for (let i = 0; i < pts.length - 1; i += 9) {
+      const part = pts.slice(i, i + 10);
+      const url = `https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${enc(part[0].address)}&destination=${enc(part[part.length - 1].address)}` +
+        (part.length > 2 ? '&waypoints=' + part.slice(1, -1).map((p) => enc(p.address)).join('%7C') : '');
+      out.push({ label: `${part[0].label === 'start' ? 'Start' : 'Stop ' + part[0].label} to stop ${part[part.length - 1].label}`, url });
+    }
+    return out;
+  }
   const mapWarning = (s) => (!s.loc ? "Couldn't find this address on the map, so it's listed last. Fit it in where it makes sense."
     : s.loc.approx ? 'Exact address not found on the map; placed by town.' : '');
   const startNote = (startText, start) => (startText ? (start ? `Starting from ${startText}` : `Couldn't find "${startText}" on the map, so the order starts from the best first house`) : 'Ordered to keep the drive short');
   const goneText = (gone) => (gone ? `${gone} KEEP house${gone > 1 ? 's are' : ' is'} no longer for sale (pending, sold or off market) and ${gone > 1 ? 'are' : 'is'} left out.` : '');
 
   // The whole list as lines of text: [{ text, kind }] where kind is title, sub, head, line, note or link.
-  function textReport({ town, stops, total, start, startText, gone, filterName, marks }) {
+  function textReport({ town, stops, total, minutes, road, start, startText, gone, filterName, marks }) {
     const out = [{ kind: 'title', text: `KEEP houses: ${town} (${stops.length} ${stops.length === 1 ? 'house' : 'houses'})` },
-      { kind: 'sub', text: `${startNote(startText, start)}. About ${total.toFixed(1)} miles in straight lines between stops (the roads will be longer). Filter: ${filterName}` }];
+      { kind: 'sub', text: `${startNote(startText, start)}. ${distanceText({ total, minutes, road })} Filter: ${filterName}` }];
     if (gone) out.push({ kind: 'sub', text: goneText(gone) });
+    const maps = mapsUrls(start, stops);
+    if (maps.length) out.push({ kind: 'head', text: 'Directions in Google Maps' });
+    maps.forEach((m) => out.push({ kind: 'line', text: `${m.label}:`, url: m.url }, { kind: 'link', text: m.url, url: m.url }));
     if (!stops.length) out.push({ kind: 'line', text: "You haven't marked any houses KEEP that are still for sale." });
     stops.forEach((s, i) => {
       const r = s.r, f = facts(r), m = marks[r.zpid] || {};
       out.push({ kind: 'head', text: `${i + 1}. ${r.address || r.url}` });
       const leg = legText(s, i ? `stop ${i}` : 'the start');
-      if (leg) out.push({ kind: 'line', text: `${leg} (straight line)` });
+      if (leg) out.push({ kind: 'line', text: leg });
       if (mapWarning(s)) out.push({ kind: 'note', text: mapWarning(s) });
       out.push({ kind: 'line', text: sizeText(S.houseInfo(r)) });
       out.push({ kind: 'line', text: `Score ${r.score} ${r.verdict}` });
@@ -131,10 +194,10 @@
       if (f.missing.length) out.push({ kind: 'line', text: `Missing: ${f.missing.join(', ')}` });
       f.issues.forEach((t) => out.push({ kind: 'note', text: t }));
       if (m.comment) out.push({ kind: 'line', text: `Your note: ${m.comment}` });
-      if (r.url) out.push({ kind: 'link', text: r.url });
+      if (r.url) out.push({ kind: 'link', text: r.url, url: r.url });
     });
     return out;
   }
 
-  root.HouseKeepList = { HOME, sizeText, facts, keptHouses, geocode, locateAll, locateStart, order, legText, mapWarning, startNote, goneText, textReport };
+  root.HouseKeepList = { HOME, sizeText, facts, keptHouses, geocode, locateAll, locateStart, roadTable, routeByRoad, order, mapsUrls, legText, distanceText, mapWarning, startNote, goneText, textReport };
 })(typeof self !== 'undefined' ? self : this);
