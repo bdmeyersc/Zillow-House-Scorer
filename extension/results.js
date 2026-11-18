@@ -78,10 +78,14 @@ el.addEventListener('click', async (e) => {
     if (!(zpid in drafts)) return;
     const comment = drafts[zpid];
     save.disabled = true;
-    await updateMark(zpid, { comment });
-    if (drafts[zpid] === comment) delete drafts[zpid];
+    let ok = true;
+    try { await updateMark(zpid, { comment }); } catch (err) { ok = false; }
+    if (ok && drafts[zpid] === comment) delete drafts[zpid];
     const now = el.querySelector(`[data-zpid="${CSS.escape(zpid)}"]`);
-    if (now) { now.querySelector('textarea.cmt').dataset.saved = comment; showNoteState(now, 'Saved'); }
+    if (!now) return;
+    if (ok) now.querySelector('textarea.cmt').dataset.saved = comment;
+    showNoteState(now, ok ? 'Saved' : '');
+    if (!ok) now.querySelector('.cmtmsg').textContent = "Couldn't save. Try again.";
     return;
   }
   const b = e.target.closest('button[data-act]');
@@ -110,7 +114,10 @@ document.getElementById('edit').onclick = () => chrome.tabs.create({ url: chrome
 document.getElementById('print').onclick = () => chrome.tabs.create({ url: chrome.runtime.getURL('print.html') + '?town=' + encodeURIComponent(document.getElementById('town').value) });
 document.getElementById('refresh').onclick = render;
 document.getElementById('clear').onclick = async () => {
-  if (!confirm('Remove all scored houses from the report? (Your KEEP / NO marks and notes are kept and come back if you rescan a house.)')) return;
+  const unsaved = Object.keys(drafts).length;
+  if (!confirm('Remove all scored houses from the report? (Your KEEP / NO marks and saved notes are kept and come back if you rescan a house.)'
+    + (unsaved ? `\n\n${unsaved} note${unsaved > 1 ? 's are' : ' is'} not saved yet and will be lost. Click Cancel, then Save note, to keep ${unsaved > 1 ? 'them' : 'it'}.` : ''))) return;
+  Object.keys(drafts).forEach((z) => delete drafts[z]);
   await chrome.storage.local.set({ scores: {} });
   render();
 };
