@@ -1,8 +1,6 @@
-const S = HouseScorer, R = HouseReport;
+const S = HouseScorer, R = HouseReport, K = HouseKeepList;
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const n = (x) => Number(x).toLocaleString('en-US');
 const $ = (id) => document.getElementById(id);
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const unticked = new Set();
 let keep = [], gone = 0, marks = {}, filterName = '';
 
@@ -10,9 +8,7 @@ async function load() {
   const [{ scores = {}, marks: m = {} }, filters] = await Promise.all([chrome.storage.local.get(['scores', 'marks']), HouseFilters.load()]);
   marks = m;
   filterName = filters.active;
-  const kept = Object.values(scores).filter((r) => (marks[r.zpid] || {}).mark === 'keep');
-  keep = kept.filter((r) => !S.goneStatus(r)).map((r) => S.rescore(r, filters.cfg));
-  gone = kept.length - keep.length;
+  ({ keep, gone } = K.keptHouses(scores, marks, filters.cfg));
   const towns = R.townList(keep).filter((t) => t.count);
   const sel = $('town');
   const prev = sel.value || new URLSearchParams(location.search).get('town');
@@ -23,13 +19,10 @@ async function load() {
 
 const shown = () => R.sortResults($('town').value === 'all' ? keep : keep.filter((r) => R.townName(r) === $('town').value));
 
-function sizeText(h) {
-  return [h.price != null && `$${n(Math.round(h.price))}`, h.sqft != null && `${n(h.sqft)} sq ft`, h.beds != null && `${h.beds} bd`, h.baths != null && `${h.baths} ba`,
-    h.perSqft != null && `$${n(h.perSqft)}/sq ft`, h.yearBuilt != null && `Built ${h.yearBuilt}`].filter(Boolean).join(' · ');
-}
+const sizeText = K.sizeText;
 
 const goneNote = () => {
-  if (gone) $('list').insertAdjacentHTML('afterbegin', `<p class="gonenote">${gone} KEEP house${gone > 1 ? 's are' : ' is'} no longer for sale (pending, sold or off market) and ${gone > 1 ? 'are' : 'is'} left out. See the bottom of the report.</p>`);
+  if (gone) $('list').insertAdjacentHTML('afterbegin', `<p class="gonenote">${esc(K.goneText(gone))} See the bottom of the report.</p>`);
 };
 
 function renderList() {
@@ -48,68 +41,6 @@ function renderList() {
       <td>${r.score} ${esc(r.verdict)}</td><td>${esc((marks[r.zpid] || {}).comment || '')}</td></tr>`;
   }).join('')}</tbody></table>`;
   goneNote();
-}
-
-// ---- finding houses on the map ----
-async function census(addr) {
-  const u = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=' + encodeURIComponent(addr);
-  const j = await (await fetch(u)).json();
-  const m = j.result && j.result.addressMatches && j.result.addressMatches[0];
-  return m ? { lat: m.coordinates.y, lng: m.coordinates.x } : null;
-}
-
-let lastOsm = 0;
-async function osm(q) {
-  await sleep(Math.max(0, lastOsm + 1100 - Date.now())); // OpenStreetMap allows one lookup per second
-  lastOsm = Date.now();
-  const j = await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' + encodeURIComponent(q))).json();
-  return j[0] ? { lat: Number(j[0].lat), lng: Number(j[0].lon) } : null;
-}
-
-const tryGeo = async (fn, q) => { try { return await fn(q); } catch (e) { return null; } };
-
-// Street address first; if that isn't found, the town (marked approximate).
-async function geocode(addr) {
-  const exact = (await tryGeo(census, addr)) || (await tryGeo(osm, addr));
-  if (exact) return { ...exact, approx: false };
-  const town = String(addr).split(',').slice(1).join(',').trim();
-  const rough = town && (await tryGeo(osm, town));
-  return rough ? { ...rough, approx: true } : null;
-}
-
-async function locateAll(rs, say) {
-  const { geo = {} } = await chrome.storage.local.get('geo');
-  const found = {};
-  let i = 0;
-  for (const r of rs) {
-    say(`Finding houses on the map: ${++i} of ${rs.length}…`);
-    const h = S.houseInfo(r);
-    const g = geo[r.zpid];
-    if (h.lat != null && h.lng != null) found[r.zpid] = { lat: h.lat, lng: h.lng, approx: false };
-    else if (g && g.address === r.address && !g.approx) found[r.zpid] = g;
-    else {
-      const res = await geocode(r.address);
-      if (res) found[r.zpid] = { ...res, address: r.address };
-      else if (g && g.address === r.address) found[r.zpid] = g;
-    }
-  }
-  await HouseFilters.withLock(async () => {
-    const { geo: cur = {} } = await chrome.storage.local.get('geo');
-    for (const [z, g] of Object.entries(found)) if (g.address) cur[z] = g;
-    await chrome.storage.local.set({ geo: cur });
-  });
-  return found;
-}
-
-async function locateStart(addr) {
-  if (!addr) return null;
-  try {
-    const c = JSON.parse(localStorage.routeStartGeo || 'null');
-    if (c && c.address === addr) return c;
-  } catch (e) { /* re-find */ }
-  const g = await geocode(addr);
-  if (g) localStorage.routeStartGeo = JSON.stringify({ ...g, address: addr });
-  return g ? { ...g, address: addr } : null;
 }
 
 // ---- the printed list ----
@@ -131,15 +62,14 @@ function mapsLinks(start, stops) {
 function stopCard(s, i, prevLabel) {
   const r = s.r;
   const m = marks[r.zpid] || {};
-  const label = { yes: '', partial: ' (partly)' };
-  const has = S.statedWants(r).filter((w) => w.state !== 'no').map((w) => esc(w.name) + label[w.state] + (S.feeText(w) ? ` (${esc(S.feeText(w))})` : ''));
-  const missing = S.statedWants(r).filter((w) => w.state === 'no').map((w) => esc(w.name));
-  const issues = r.musts.filter((x) => x.status !== 'pass').map((x) => `${x.status === 'fail' ? 'No' : 'Check'}: ${esc(x.name)}: ${esc(x.detail)}`);
-  const leg = s.miles != null ? `${s.miles < 0.1 ? 'next door to' : `${s.miles.toFixed(1)} mi from`} ${prevLabel}` : '';
+  const f = K.facts(r);
+  const [has, missing, issues] = [f.has, f.missing, f.issues].map((l) => l.map(esc));
+  const leg = esc(K.legText(s, prevLabel));
+  const warn = K.mapWarning(s);
   return `<div class="stop"><div class="num">${i + 1}</div>
     <div class="addr"><a href="${esc(r.url)}" target="_blank">${esc(r.address || r.url)}</a></div>
     ${leg ? `<div class="leg">${leg} (straight line)</div>` : ''}
-    ${!s.loc ? '<div class="warn">Couldn\'t find this address on the map, so it\'s listed last. Fit it in where it makes sense.</div>' : s.loc.approx ? '<div class="warn">Exact address not found on the map; placed by town.</div>' : ''}
+    ${warn ? `<div class="warn">${esc(warn)}</div>` : ''}
     <div class="facts">${esc(sizeText(S.houseInfo(r)))}</div>
     <div class="facts"><span class="score ${esc(r.verdict)}">Score ${r.score} ${esc(r.verdict)}</span></div>
     ${has.length ? `<div class="wants">Has: ${has.join(', ')}</div>` : ''}
@@ -158,20 +88,13 @@ async function make() {
   const startText = $('start').value.trim();
   localStorage.routeStart = startText;
   say('Finding your starting point…');
-  const start = await locateStart(startText);
-  const found = await locateAll(rs, say);
-  const located = rs.filter((r) => found[r.zpid]).map((r) => ({ r, loc: found[r.zpid], lat: found[r.zpid].lat, lng: found[r.zpid].lng }));
-  const order = HouseRoute.orderStops(located, start).concat(rs.filter((r) => !found[r.zpid]).map((r) => ({ r, loc: null })));
-  let total = 0;
-  order.forEach((s, i) => {
-    const prev = i ? order[i - 1] : start;
-    s.miles = s.loc && prev && (prev.lat != null) ? HouseRoute.miles(prev, s) : null;
-    if (s.miles != null) total += s.miles;
-  });
+  const start = await K.locateStart(startText);
+  const found = await K.locateAll(rs, say);
+  const { stops: order, total } = K.order(rs, found, start);
   const town = $('town').value === 'all' ? 'All towns' : $('town').value;
   const today = new Date();
   document.title = `KEEP houses - ${town} - ${today.toISOString().slice(0, 10)}`;
-  const startNote = startText ? (start ? `Starting from ${esc(startText)}` : `Couldn't find "${esc(startText)}" on the map, so the order starts from the best first house`) : 'Ordered to keep the drive short';
+  const startNote = esc(K.startNote(startText, start));
   $('sheet').innerHTML = `<div class="sheet"><h1>KEEP houses: ${esc(town)} (${order.length} ${order.length === 1 ? 'house' : 'houses'})</h1>
     <div class="sub">${startNote}. About ${total.toFixed(1)} miles in straight lines between stops (the roads will be longer). Made ${esc(today.toLocaleDateString())} · filter: ${esc(filterName)}</div>
     ${mapsLinks(start, order.filter((s) => s.loc))}
@@ -201,6 +124,6 @@ $('saveHtml').onclick = async () => {
   a.download = document.title.replace(/[^\w -]+/g, '') + '.html';
   a.click();
 };
-$('start').value = localStorage.routeStart || '';
+$('start').value = localStorage.routeStart ?? K.HOME;
 chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && (ch.scores || ch.marks) && $('out').style.display === 'none') load(); });
 load();

@@ -70,9 +70,19 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await report.click('#report table tbody tr.kept button[data-save]');
     await sleep(1200);
     console.log('after Save note:', await report.$eval('#report tbody tr.kept .cmtmsg', (e) => e.innerText));
+    console.log('drive status after Save note:', await report.$eval('#driveStatus', (e) => e.innerText), '| queued:', JSON.stringify(await report.evaluate(async () => { const { driveSync = {} } = await chrome.storage.local.get('driveSync'); return { dirty: !!driveSync.dirty, inSec: driveSync.dueAt ? Math.round((driveSync.dueAt - Date.now()) / 1000) : null }; })));
+    // a draft being typed must survive a Drive status update, with the cursor where it was
+    await report.click('#report table tbody tr.kept textarea.cmt');
+    await report.keyboard.type(' draft');
+    await report.click('#driveNow');
+    await sleep(1500);
+    await report.focus('#report table tbody tr.kept textarea.cmt');
+    console.log('Save to Drive now (not set up):', await report.$eval('#driveStatus', (e) => e.innerText),
+      '| draft kept:', await report.$eval('#report tbody tr.kept textarea.cmt', (e) => e.value), '|', await report.$eval('#report tbody tr.kept .cmtmsg', (e) => e.innerText));
+    await report.$eval('#report tbody tr.kept textarea.cmt', (e) => { e.value = e.dataset.saved; e.dispatchEvent(new Event('input', { bubbles: true })); });
     // simultaneous writes for two houses must both survive
     await report.evaluate(() => {
-      const rows = document.querySelectorAll('#report table')[0].querySelectorAll('tbody tr:not(.kept)');
+      const rows = document.querySelectorAll('#report tbody tr:not(.kept)');
       rows[0].querySelector('button[data-act="keep"]').click();
       const ta = rows[1].querySelector('textarea.cmt');
       ta.value = 'Carport only';
@@ -159,6 +169,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     console.log('print towns:', await pp.$$eval('#town option', (o) => o.map((x) => x.textContent).join(', ')), '| houses:', await pp.$$eval('#list tbody tr', (r) => r.length));
     await pp.screenshot({ path: ROOT + '/samples/shot_print_pick.png', fullPage: true });
     await pp.click('#list tbody tr:last-child input');
+    console.log('print start prefilled:', await pp.$eval('#start', (e) => e.value));
+    await pp.$eval('#start', (e) => { e.value = ''; });
     await pp.type('#start', '200 N Main St, Sumter, SC 29150');
     await pp.click('#make');
     await pp.waitForFunction(() => document.getElementById('out').style.display !== 'none', { timeout: 120000 });

@@ -154,8 +154,35 @@ document.getElementById('restoreFile').onchange = async (e) => {
     say(`Couldn't load ${file.name}: ${err.message.includes('JSON') ? 'this file is not a House Scorer backup.' : err.message}`);
   }
 };
+// ---- Google Drive copy (saved by the background worker; this only shows its state) ----
+const when = (ms) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function driveText(d) {
+  const last = d.lastOkAt ? ` Last saved ${when(d.lastOkAt)} as "${d.lastName}".` : ' Not saved yet.';
+  if (d.saving) return { text: 'Saving…' + (d.lastOkAt ? last : ''), color: '#555' };
+  if (d.error) return { text: `Last save failed (${when(d.errorAt)}): ${d.error} It tries again after your next change and when Chrome starts.${last}`, color: '#b00020' };
+  if (d.disconnected) return { text: `Disconnected. Click "Save to Drive now" to connect again.${last}`, color: '#8a5a00' };
+  if (!d.lastOkAt) return { text: 'Not saved yet' + (d.dirty && d.dueAt ? ` (saves about ${when(d.dueAt)})` : ''), color: '#555' };
+  if (d.dirty) return { text: `Changes not saved yet${d.dueAt ? `; saves about ${when(d.dueAt)}` : ''}.${last}`, color: '#555' };
+  return { text: `Saved ${when(d.lastOkAt)} as "${d.lastName}".`, color: '#13692a' };
+}
+function showDrive(d = {}) {
+  const t = driveText(d), el = document.getElementById('driveStatus');
+  el.textContent = t.text;
+  el.style.color = t.color;
+  document.getElementById('driveNow').disabled = !!d.saving;
+}
+chrome.storage.local.get('driveSync').then(({ driveSync }) => showDrive(driveSync));
+const driveAsk = async (type) => {
+  try { await chrome.runtime.sendMessage({ type }); } catch (e) { showDrive({ error: `The extension didn't answer (${e.message}). Reload it in chrome://extensions.`, errorAt: Date.now() }); }
+};
+document.getElementById('driveNow').onclick = () => driveAsk('driveSaveNow');
+document.getElementById('driveOff').onclick = () => {
+  if (confirm('Stop saving the KEEP houses list to Google Drive? Files already in Drive stay there.')) driveAsk('driveDisconnect');
+};
+
 chrome.storage.onChanged.addListener((ch, area) => {
   if (area !== 'local') return;
+  if (ch.driveSync) showDrive(ch.driveSync.newValue);
   // Saving a note doesn't re-render, so the page doesn't jump.
   if (ch.scores || ch.searches || HouseFilters.isFilterChange(ch) || (ch.marks && markSig(ch.marks.newValue) !== lastMarkSig)) render();
   else if (ch.marks) syncNotes(ch.marks.newValue);

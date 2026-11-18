@@ -17,6 +17,11 @@
     <button id="restore" style="font-size:16px;padding:6px 14px;margin-left:8px" title="Add the houses, filters, marks and notes from a backup file to this PC">Load backup</button>
     <input type="file" id="restoreFile" accept=".json,application/json" style="display:none">
     <div id="backupMsg" style="font-weight:600;color:#13692a;margin-top:6px"></div>
+  <div id="driveRow" style="margin-top:8px">
+    <button id="driveNow" style="font-size:16px;padding:6px 14px">Save to Drive now</button>
+    <button id="driveOff" style="font-size:16px;padding:6px 14px;margin-left:8px">Disconnect Drive</button>
+    <span style="margin-left:8px">Google Drive: <span id="driveStatus" role="status">Not saved yet</span></span>
+  </div>
   </div>
   <div id="report">Loading…</div>
   <script src="scorer.js"></script>

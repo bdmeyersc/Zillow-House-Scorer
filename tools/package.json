@@ -4,10 +4,12 @@
   "description": "Offline test tools for the House Scorer Chrome extension",
   "scripts": {
     "score-samples": "node run.js",
-    "e2e": "node e2e.js"
+    "e2e": "node e2e.js",
+    "drive-test": "node drive-test.js"
   },
   "devDependencies": {
     "jsdom": "^24.0.0",
+    "pdfjs-dist": "^3.11.174",
     "puppeteer-core": "^22.0.0"
   }
 }

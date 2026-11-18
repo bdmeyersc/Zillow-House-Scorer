@@ -24,6 +24,13 @@ HOW TO USE
   skipped, and the report collects them all.
 - Opening any single listing also shows its score in the box.
 
+GOOGLE DRIVE COPY
+- The report can keep today's KEEP list in your Google Drive as
+  "KEEP houses - All towns - YYYY-MM-DD.pdf". Set it up once with the SETUP
+  steps in README.md (Google Cloud Console, then your Client ID goes into
+  manifest.json). Until then the report says Drive is not set up yet.
+- After an update, put your Client ID back into manifest.json before Reload.
+
 FILTERS (your own criteria)
 - Click "See / change filters" in the House Scorer box or on the report page.
 - Change any number, or uncheck a line to ignore it. Click "Save changes".
