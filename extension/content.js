@@ -205,7 +205,8 @@
     const { searches = {}, seenIn = {} } = await chrome.storage.local.get(['searches', 'seenIn']);
     const s = searches[info.key] || {};
     const now = Date.now();
-    const goesOn = s.run && info.page > 1 && info.page === s.run.page + 1 && now - s.run.at < RUN_HOURS * 3600e3;
+    // Scanning the same page again (e.g. Resume scoring after Zillow's human check) stays in the same run.
+    const goesOn = s.run && info.page > 1 && (info.page === s.run.page + 1 || info.page === s.run.page) && now - s.run.at < RUN_HOURS * 3600e3;
     s.run = goesOn ? { ...s.run, page: info.page } : { at: now, page: info.page, partial: info.page !== 1 };
     s.label = info.label;
     urls.forEach((u) => { const z = zpidOf(u); if (z) (seenIn[z] = seenIn[z] || {})[info.key] = s.run.at; });
