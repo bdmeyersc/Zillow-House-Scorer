@@ -1,4 +1,4 @@
-import http.server, ssl, os, glob, re, json, urllib.parse
+import http.server, ssl, os, glob, re, json, urllib.parse, html
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'samples')
 routes = {}
 links = []
@@ -17,8 +17,8 @@ def search_page():
 def listing(path, body):
     z = path.rstrip('/').split('/')[-1].split('_')[0]
     extra = ''
-    if z in state['text']: extra += f"<div>{state['text'][z]}</div>"
-    if z in state['json']: extra += '<script type="application/json">' + json.dumps({'props': {'resoFacts': {}, 'homeStatus': state['json'][z]}}) + '</script>'
+    if z in state['text']: extra += f"<div>{html.escape(state['text'][z])}</div>"
+    if z in state['json']: extra += '<script type="application/json">' + json.dumps({'props': {'resoFacts': {}, 'homeStatus': state['json'][z]}}).replace('<', '\\u003c') + '</script>'
     return body.replace(b'<body>', b'<body>' + extra.encode(), 1)
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
