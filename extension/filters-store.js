@@ -69,14 +69,17 @@
         times[n] = bt;
       }
     }
+    const plain = (k) => k !== '__proto__' && k !== 'constructor' && k !== 'prototype';
     const seenIn = cur.seenIn || {};
     for (const [z, keys] of Object.entries(b.seenIn || {})) {
-      const mine = seenIn[z] = seenIn[z] || {};
-      for (const [k, at] of Object.entries(keys || {})) if (!(mine[k] >= at)) mine[k] = at;
+      if (!plain(z)) continue;
+      const mine = seenIn[z] = Object.hasOwn(seenIn, z) ? seenIn[z] : {};
+      for (const [k, at] of Object.entries(keys || {})) if (plain(k) && typeof at === 'number' && !(mine[k] >= at)) mine[k] = at;
     }
     const searches = cur.searches || {};
     for (const [k, srch] of Object.entries(b.searches || {})) {
-      const mine = searches[k];
+      if (!plain(k) || !srch || typeof srch !== 'object') continue;
+      const mine = Object.hasOwn(searches, k) ? searches[k] : null;
       if (!mine) { searches[k] = srch; continue; }
       if ((srch.run && srch.run.at) > (mine.run ? mine.run.at : 0)) { mine.run = srch.run; mine.label = srch.label || mine.label; }
       if ((srch.fullAt || 0) > (mine.fullAt || 0)) mine.fullAt = srch.fullAt;
