@@ -7,6 +7,7 @@
   const UPLOAD = 'https://www.googleapis.com/upload/drive/v3';
   const DELAY = 60 * 1000;
   const ALARM = 'driveSave';
+  const DAY_ALARM = 'driveDay'; // hourly: start a new day's file after midnight even without changes
   const ZONE = 'America/New_York';
   // Storage keys behind the KEEP report. A change to any of them schedules an upload.
   const WATCHED = ['scores', 'marks', 'filterSets', 'activeFilter'];
@@ -159,9 +160,17 @@
       return setState({ disconnected: true, saving: false, dueAt: null, error: null });
     }
 
+    // Hourly: once the Eastern date has moved past the last saved file, save today's file.
+    async function dayCheck() {
+      const s = await state();
+      if (s.disconnected || s.saving || !clientId() || !s.lastName || s.lastName === fileName(new Date(now()))) return;
+      await save();
+    }
+
     // The service worker (re)started. A save cut off when it last stopped goes back in the queue.
     // On a browser or extension start (fresh = true), also retry a queued save and make today's file if there isn't one yet.
     async function startup(fresh) {
+      if (!(await chrome.alarms.get(DAY_ALARM))) await chrome.alarms.create(DAY_ALARM, { periodInMinutes: 60 });
       const s = await state();
       if (s.saving && !running) await setState({ saving: false, dirty: true });
       if (s.disconnected || !clientId()) return;
@@ -171,7 +180,7 @@
       }
     }
 
-    return { changed, isWatched, save, disconnect, startup, state, ALARM };
+    return { changed, isWatched, save, disconnect, startup, dayCheck, state, ALARM, DAY_ALARM };
   }
 
   const api = { create, fileName, dayOf, hash, DELAY, SCOPE };

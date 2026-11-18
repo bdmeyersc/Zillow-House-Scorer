@@ -54,7 +54,7 @@ const json = (o, status = 200) => ({ ok: status < 400, status, json: async () =>
 function boot({ clientId = '1234-test.apps.googleusercontent.com', data = {}, drive = fakeDrive(), clock = { t: Date.parse('2026-11-17T15:00:00Z') } } = {}) {
   const store = JSON.parse(JSON.stringify(data));
   const listeners = { changed: [], alarm: [], startup: [], installed: [], message: [] };
-  const alarms = {};
+  const alarms = {}, periods = {};
   const identity = { signedIn: true, removed: [], asked: [] };
   const ev = (list) => ({ addListener: (f) => list.push(f) });
   const chrome = {
@@ -76,8 +76,9 @@ function boot({ clientId = '1234-test.apps.googleusercontent.com', data = {}, dr
       onChanged: ev(listeners.changed),
     },
     alarms: {
-      create: async (name, info) => { alarms[name] = info.when; },
+      create: async (name, info) => { alarms[name] = info.when ?? clock.t + info.periodInMinutes * 60000; periods[name] = info.periodInMinutes; },
       clear: async (name) => { const had = name in alarms; delete alarms[name]; return had; },
+      get: async (name) => (name in alarms ? { name, scheduledTime: alarms[name] } : undefined),
       onAlarm: ev(listeners.alarm),
     },
     identity: {
@@ -115,7 +116,10 @@ function boot({ clientId = '1234-test.apps.googleusercontent.com', data = {}, dr
     await settle();
     clock.t += ms;
     for (const [name, when] of Object.entries(alarms)) {
-      if (when <= clock.t) { delete alarms[name]; listeners.alarm.forEach((f) => f({ name })); }
+      if (when <= clock.t) {
+        if (periods[name]) alarms[name] = when + periods[name] * 60000; else delete alarms[name];
+        listeners.alarm.forEach((f) => f({ name }));
+      }
     }
     await settle();
   };
@@ -337,6 +341,20 @@ test('disconnect while a save is uploading: stays disconnected', async () => {
   await b.set({ marks: { 1000: { mark: 'keep', updatedAt: 9 } } });
   await b.advance(MIN);
   assert.strictEqual(b.drive.calls.length, before);
+});
+
+test('a new day gets its own file without any change (Chrome left open overnight)', async () => {
+  const b = boot({ data: sampleData(), clock: { t: Date.parse('2026-11-18T04:00:00Z') } }); // 11pm Eastern
+  await settle();
+  assert.ok(b.alarms.driveDay, 'hourly day check is set');
+  await b.send({ type: 'driveSaveNow' });
+  await b.advance(30 * MIN);
+  assert.deepStrictEqual(b.drive.calls, ['LIST', 'CREATE'], 'same day: no new upload');
+  await b.advance(30 * MIN); // midnight Eastern
+  assert.deepStrictEqual(b.drive.calls, ['LIST', 'CREATE', 'LIST', 'CREATE']);
+  assert.deepStrictEqual(b.drive.files.map((f) => f.name), ['KEEP houses - All towns - 2026-11-17.pdf', 'KEEP houses - All towns - 2026-11-18.pdf']);
+  await b.advance(3 * 60 * MIN);
+  assert.strictEqual(b.drive.calls.length, 4, 'one upload per new day');
 });
 
 test('not set up: the placeholder client ID gives a clear message and no upload', async () => {

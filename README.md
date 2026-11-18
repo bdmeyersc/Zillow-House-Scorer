@@ -55,7 +55,7 @@ The report keeps today's KEEP driving list in Google Drive as a PDF named `KEEP 
 
 - It has the same content as the printed "All towns" list: every KEEP house still for sale, in driving order from 2911 Waverly Rd, Sumter, SC, with price, beds/baths, sq ft, year built, score, what it has and is missing, and your saved note. The text is real, selectable text.
 - About 60 seconds after the last change to the report's data (a KEEP / NO mark, a scored house, a saved note, Clear all results, a filter change) the background worker uploads it once. Unsaved note drafts are never uploaded.
-- If today's file is already in Drive it is updated, never copied. A new day gets a new file.
+- If today's file is already in Drive it is updated, never copied. A new day gets a new file, within an hour after midnight if Chrome is open, even with no changes.
 - **Save to Drive now** on the report saves right away (and signs you in to Google the first time). The line next to it says when it last saved, "Saving…", "Not saved yet", or why the last try failed. A failed save stays queued and runs again after your next change and when Chrome starts. Scoring and notes keep working offline.
 - **Disconnect Drive** signs the extension out of Google Drive and stops automatic saves until you click **Save to Drive now** again. Files already in Drive stay there.
 - The extension uses the `drive.file` permission only: it can see and change only the files it made, nothing else in your Drive. The files go in the top level of My Drive.

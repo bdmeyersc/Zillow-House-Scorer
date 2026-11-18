@@ -21,7 +21,10 @@ const drive = HouseDrive.create({ chrome, fetch: (...a) => fetch(...a), build: b
 drive.startup(false);
 chrome.runtime.onStartup.addListener(() => drive.startup(true));
 chrome.runtime.onInstalled.addListener(() => drive.startup(true));
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === drive.ALARM) drive.save(); });
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === drive.ALARM) drive.save();
+  else if (a.name === drive.DAY_ALARM) drive.dayCheck();
+});
 chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && drive.isWatched(ch)) drive.changed(); });
 
 chrome.action.onClicked.addListener(() => chrome.tabs.create({ url: reportUrl() }));
