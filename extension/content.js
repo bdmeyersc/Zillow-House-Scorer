@@ -259,9 +259,9 @@
     // Houses this search found before but not on this full pass: re-read them to see if they are under contract or sold.
     let dropped = [];
     if (run.full && !stopRequested) {
-      const { scores: now = {}, seenIn = {}, searches = {} } = await chrome.storage.local.get(['scores', 'seenIn', 'searches']);
+      const { scores: now = {}, seenIn = {} } = await chrome.storage.local.get(['scores', 'seenIn']);
       dropped = Object.entries(seenIn)
-        .filter(([z, k]) => S.droppedFrom(info.key, k, searches) && now[z] && now[z].url && !S.goneStatus(now[z]) && !fresh(now[z].url))
+        .filter(([z, k]) => k[info.key] < run.at && now[z] && now[z].url && !S.goneStatus(now[z]) && !fresh(now[z].url))
         .map(([z]) => now[z].url);
     }
     const checked = { done: 0, failed: 0 };
