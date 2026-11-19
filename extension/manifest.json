@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "House Scorer for Zillow",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Scores Zillow listings against Bruce's downsizing checklist.",
   "permissions": ["storage", "unlimitedStorage", "identity", "alarms"],
   "host_permissions": ["https://geocoding.geo.census.gov/*", "https://nominatim.openstreetmap.org/*", "https://router.project-osrm.org/*", "https://www.googleapis.com/*", "https://oauth2.googleapis.com/*"],
