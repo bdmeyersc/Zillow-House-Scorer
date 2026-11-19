@@ -665,29 +665,37 @@
   // The status read at the last scan when it isn't for sale (pending, under contract, sold, off market); null otherwise.
   const goneStatus = (r) => { const st = (r.facts || {}).listingStatus; return st && st.kind !== 'active' ? st : null; };
 
-  // Houses found by an earlier scan of a search that a later full pass (every page) didn't find:
-  // { label, at, checked } where checked means the house was re-read after that pass and is still listed for sale.
-  function missingFromSearch(r, searches, seenIn) {
-    const seen = (seenIn || {})[r.zpid] || {};
-    for (const [key, at] of Object.entries(seen)) {
-      const s = (searches || {})[key];
-      if (s && s.fullAt && at < s.fullAt) return { label: s.label || key, at: s.fullAt, checked: (r.scoredAt || 0) >= s.fullAt };
-    }
-    return null;
+  // True when the house was found by an earlier scan of search `key` but not by its latest full pass (every page),
+  // and no other search still finds it (a house that is now in another search hasn't dropped out of his searches).
+  function droppedFrom(key, seen, searches) {
+    const s = (searches || {})[key];
+    if (!s || !s.fullAt || !(seen[key] < s.fullAt)) return false;
+    return !Object.entries(seen).some(([k, at]) => k !== key && searches[k] && at >= (searches[k].fullAt || 0));
   }
 
-  function searchListingUrls(doc) {
+  // { label, at, checked } for a house that dropped out of a search (see droppedFrom), where checked means the house was
+  // re-read after that pass and is still listed for sale; null otherwise.
+  function missingFromSearch(r, searches, seenIn) {
+    const seen = (seenIn || {})[r.zpid] || {};
+    const key = Object.keys(seen).find((k) => droppedFrom(k, seen, searches));
+    if (!key) return null;
+    const s = searches[key];
+    return { label: s.label || key, at: s.fullAt, checked: (r.scoredAt || 0) >= s.fullAt };
+  }
+
+  // Pass useJson = false after Zillow changed the search in place: its embedded page data still lists the first search's houses.
+  function searchListingUrls(doc, useJson = true) {
     const urls = new Map();
     const add = (href) => {
       const m = href && href.match(/\/homedetails\/[^?#]*?(\d+)_zpid/);
       if (m) urls.set(m[1], new URL(href, 'https://www.zillow.com').href.split(/[?#]/)[0]);
     };
     doc.querySelectorAll('a[href*="/homedetails/"]').forEach((a) => add(a.getAttribute('href')));
-    findObjects(pageJson(doc), (o) => typeof o.detailUrl === 'string').forEach((o) => add(o.detailUrl));
+    if (useJson) findObjects(pageJson(doc), (o) => typeof o.detailUrl === 'string').forEach((o) => add(o.detailUrl));
     return [...urls.values()];
   }
 
-  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants, feeText, priceChange, priceChangeText, scanDateText, goneStatus, missingFromSearch };
+  const api = { DEFAULT_CONFIG, WANTS, normalizeConfig, townOf, maxScore, describeMusts, rescore, textLines, parseListing, scoreListing, scoreDocument, searchListingUrls, jsonExtras, houseInfo, statedWants, feeText, priceChange, priceChangeText, scanDateText, goneStatus, droppedFrom, missingFromSearch };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HouseScorer = api;
 })(typeof self !== 'undefined' ? self : this);

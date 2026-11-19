@@ -153,7 +153,8 @@
   }
 
   async function collectSearchUrls() {
-    const urls = new Set(S.searchListingUrls(document));
+    const json = !!loadKey && (searchInfo() || {}).key === loadKey;
+    const urls = new Set(S.searchListingUrls(document, json));
     const first = document.querySelector('a[href*="/homedetails/"]');
     if (first) {
       const sc = scrollableAncestor(first);
@@ -161,7 +162,7 @@
       for (let i = 0; i < 60 && sc.scrollTop + sc.clientHeight < sc.scrollHeight - 5; i++) {
         sc.scrollTop += Math.max(300, sc.clientHeight * 0.8);
         await sleep(400);
-        S.searchListingUrls(document).forEach((u) => urls.add(u));
+        S.searchListingUrls(document, json).forEach((u) => urls.add(u));
       }
       sc.scrollTop = start;
     }
@@ -195,6 +196,10 @@
     const page = (q.pagination && q.pagination.currentPage) || (pm ? +pm[1] : 1);
     return { key: path + (region ? '|' + region : '') + (filters !== '[]' ? '|' + filters : ''), label, page };
   }
+
+  // The search the page was loaded with. Zillow switches searches without reloading the page, and its embedded page data
+  // keeps listing the houses of this one.
+  let loadKey = null;
 
   const nextPageLink = () => document.querySelector('a[title="Next page"]:not([aria-disabled="true"]), a[rel="next"]');
   const RUN_HOURS = 12;
@@ -273,6 +278,7 @@
   async function init() {
     const me = await send({ type: 'amIScan' });
     if (me && me.scan) return runAsScanTab(me.tabId);
+    loadKey = (searchInfo() || {}).key || null;
 
     document.body.appendChild(panel);
     $('hs-min').onclick = () => { const b = $('hs-body'); b.style.display = b.style.display === 'none' ? '' : 'none'; };
